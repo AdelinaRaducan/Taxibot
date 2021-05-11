@@ -79,9 +79,7 @@ int main( int argc, char* args[] ) {
 	
 	CreateWindow(SCREEN_WIDTH_PIXELS, SCREEN_HEIGHT_PIXELS);
 
-	printf("call function\n");
 	game_state *GameState = CreateGameState(IsOpenCellFunction);
-	printf("Exist create game state\n");
 
 	UpdateAndRenderPlay(GameState);
 
