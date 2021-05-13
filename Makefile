@@ -20,7 +20,7 @@ build: $(OBJS)
 	$(CC) $(OBJS) $(COMPILER_FLAGS) $(CFLAGS) -o $(EXEC)
 
 run:
-	./main
+	./$(EXEC)
 
 clean:
 	rm -f $(EXEC)

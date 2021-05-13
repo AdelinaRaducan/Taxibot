@@ -53,7 +53,7 @@ Tstack*				PopStack(Tstack **Stack);
 void				PushStack(Tstack **Stack, cell Node);
 int 				IsStackEmpty(Tstack *Stack);
 void				PrintQueue(Tqueue **Queue);
-void 				PrintStack(Tstack *Stack);
+void 				PrintStack(Tstack **Stack);
 
 cell * GetCell(point Location, astar_grid *Grid) {
     if ((Location.Row >= 0) && (Location.Row < Grid->NumberRows)
@@ -193,8 +193,8 @@ Tstack * PopStack(Tstack **Stack) {
     return Temp;
 }
 
-void PrintStack(Tstack *Stack) {
-    Tstack *Temp = Stack;
+void PrintStack(Tstack **Stack) {
+    Tstack *Temp = *Stack;
     while (Temp != NULL) {
         printf("-> (%d,%d) ", Temp->Data.Location.Row, Temp->Data.Location.Col);
         Temp = Temp->next;
@@ -202,7 +202,7 @@ void PrintStack(Tstack *Stack) {
 }
 
 Tstack * TracePath(point Dest, astar_grid *Grid) {
-    printf("\nThe Path is: \n");
+    // printf("\nThe Path is: \n");
  
     Tstack *stack = NULL;
  
@@ -261,6 +261,13 @@ Tstack * FindPath(point Start, point End, astar_grid *Grid) {
         return NULL;
     }
 
+    for (int i = 0; i < Grid->NumberRows; i++) {
+        for (int j = 0; j < Grid->NumberCols; j++) {
+            Grid->Map[i][j].f = -1;
+            Grid->Map[i][j].g = 0.0;
+            Grid->Map[i][j].h = 0.0;
+        }
+    }
     point RefCoord = {Start.Row, Start.Col};
     Grid->Map[Start.Row][Start.Col].Location.Row = RefCoord.Row;
     Grid->Map[Start.Row][Start.Col].Location.Col = RefCoord.Col;
@@ -307,7 +314,7 @@ Tstack * FindPath(point Start, point End, astar_grid *Grid) {
                     if (EqualPoints(Neighbour, End)) {
                         Grid->Map[Neighbour.Row][Neighbour.Col].Location.Row = RefCoord.Row;
                         Grid->Map[Neighbour.Row][Neighbour.Col].Location.Col = RefCoord.Col;
-                        printf("The Destination cell is found\n");
+                        printf("The Destination cell has been found\n");
                         Tstack *FinalPath  = TracePath(End, Grid);
                         DestroyQueue(&OpenList);
                         return FinalPath;
@@ -337,3 +344,4 @@ Tstack * FindPath(point Start, point End, astar_grid *Grid) {
     printf("Failed to find the Destination Cell\n");
     return NULL;
 }
+

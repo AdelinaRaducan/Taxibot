@@ -8,6 +8,7 @@
 #include <limits.h>
 #include <time.h>
 #include <stdbool.h>
+#include <time.h>
 
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_ttf.h>
@@ -32,7 +33,7 @@
 
 const int SCREEN_WIDTH_PIXELS = 1280;
 const int SCREEN_HEIGHT_PIXELS = 720;
-const int TILE_SIZE_PIXELS = 16;
+const int TILE_SIZE_PIXELS = 16; 
 
 static struct {
 	SDL_Window *Handler;
@@ -76,7 +77,7 @@ void DrawTilemap(tilemap *Tilemap);
 bool IsOpenCellFunction(point Location, void *AStarGrid);
 
 int main( int argc, char* args[] ) {
-	
+	srand(time(NULL));
 	CreateWindow(SCREEN_WIDTH_PIXELS, SCREEN_HEIGHT_PIXELS);
 
 	game_state *GameState = CreateGameState(IsOpenCellFunction);
@@ -147,17 +148,40 @@ void HandleInput(game_state *GameState)
 	nk_input_end(WindowManager.Nuklear);
 }
 
+Tstack *Path = NULL;
 void Update(game_state *GameState)
 {
-	// Find Path
+	point Start = {rand()%(GameState->AStarGrid->NumberRows + 1), rand()%(GameState->AStarGrid->NumberCols + 1)};
+	point End = {rand()%(GameState->AStarGrid->NumberRows + 1), rand()%(GameState->AStarGrid->NumberCols + 1)};
+	Path = FindPath(Start, End, GameState->AStarGrid);
+}
+
+void DrawRectangle(SDL_FRect r)
+{	
+    r.y = SCREEN_HEIGHT_PIXELS - r.y;
+    SDL_SetRenderDrawColor( WindowManager.Renderer, 0, 120, 255, 255 );
+    SDL_RenderFillRectF( WindowManager.Renderer, &r );
+}
+
+void DrawPath()
+{
+	while (!IsStackEmpty(Path)) {
+		cell Cell = PopStack(&Path)->Data;
+		// printf("(%d %d)  ----- ", Cell.Location.Row, Cell.Location.Col);
+		SDL_FRect r = {.x = TILE_SIZE_PIXELS * Cell.Location.Row, 
+					   .y = TILE_SIZE_PIXELS * Cell.Location.Col, 
+					   .w = TILE_SIZE_PIXELS, .h = TILE_SIZE_PIXELS};
+		DrawRectangle(r);	
+		// printf("r.x = %.0f r.y = %0.f\n", r.x, r.y);
+	}
 }
 
 void Draw(game_state *GameState)
 {
 	StartDrawing();
-	{
+	{	
 		DrawTilemap(&GameState->Tilemap);
-		// Draw Path
+		DrawPath();
 		DrawGUI(GameState);
 	}
 	EndDrawing();
@@ -170,7 +194,7 @@ void DrawGUI(game_state *GameState)
 
 void StartDrawing()
 {
-	SDL_SetRenderDrawColor(WindowManager.Renderer, 255, 255, 0, 255);
+	SDL_SetRenderDrawColor(WindowManager.Renderer, 255, 25, 0, 255);
     SDL_RenderClear(WindowManager.Renderer);
 }
 
@@ -195,21 +219,39 @@ void DrawTilemap(tilemap *Tilemap)
 	for (int i = 0; i < Tilemap->Height; ++i)
 	{
 		DrawLine(0, i * TILE_SIZE_PIXELS, SCREEN_WIDTH_PIXELS, i * TILE_SIZE_PIXELS);
-	} 
+	}
+
+	int k = 0;
+	for (int i = 0; i < SCREEN_WIDTH_PIXELS / TILE_SIZE_PIXELS; i++) { 
+		for (int j = 0; j < SCREEN_HEIGHT_PIXELS / TILE_SIZE_PIXELS; j++) {
+			if (Tilemap->Tiles[k++].Type == TOWER_TILE) {
+				SDL_FRect r = {.x = TILE_SIZE_PIXELS * i, 
+					   		   .y = TILE_SIZE_PIXELS * j, 
+					   		   .w = TILE_SIZE_PIXELS, .h = TILE_SIZE_PIXELS};
+
+			    r.y = SCREEN_HEIGHT_PIXELS - r.y;
+			    SDL_SetRenderDrawColor( WindowManager.Renderer, 0, 0, 0, 255 );
+			    SDL_RenderFillRectF( WindowManager.Renderer, &r );
+			}
+		}
+	}
  
+}
+
+int my_random_function() { 
+    return  (rand() % 2);
 }
 
 game_state * CreateGameState(is_open_cell_function function)
 {	
-
 	game_state *GameState = (game_state *) malloc (sizeof(game_state));
 	GameState->Tilemap.Width = SCREEN_WIDTH_PIXELS / TILE_SIZE_PIXELS;
 	GameState->Tilemap.Height = SCREEN_HEIGHT_PIXELS / TILE_SIZE_PIXELS;
-	GameState->Tilemap.Tiles = (tile *) malloc (sizeof(tile) * GameState->Tilemap.Width * GameState->Tilemap.Height);
+	GameState->Tilemap.Tiles = (tile *) calloc(GameState->Tilemap.Width * GameState->Tilemap.Height, sizeof(tile));
 
 	GameState->AStarGrid = malloc(sizeof(astar_grid));
-	GameState->AStarGrid->NumberRows = GameState->Tilemap.Height;
-	GameState->AStarGrid->NumberCols = GameState->Tilemap.Width;
+	GameState->AStarGrid->NumberRows = SCREEN_WIDTH_PIXELS / TILE_SIZE_PIXELS;
+	GameState->AStarGrid->NumberCols = SCREEN_HEIGHT_PIXELS / TILE_SIZE_PIXELS;
 	GameState->AStarGrid->IsOpenCellFunction = function;
 	GameState->AStarGrid->Map = malloc(GameState->AStarGrid->NumberRows * sizeof(cell*));
 
@@ -220,9 +262,16 @@ game_state * CreateGameState(is_open_cell_function function)
 	int k = 0;
 	for (int i = 0; i < GameState->AStarGrid->NumberRows; i++) {
 		for (int j = 0; j < GameState->AStarGrid->NumberCols; j++) {
-			GameState->Tilemap.Tiles[k++].Type = ROAD_TILE;
-			GameState->AStarGrid->Map[i][j].MovementCost = 1;
+			if (i % 5 == 0 || j % 10 == 0) {
+				GameState->AStarGrid->Map[i][j].MovementCost = my_random_function();
+			} else {
+				GameState->AStarGrid->Map[i][j].MovementCost = 1;
+			}
+			
+			GameState->Tilemap.Tiles[k++].Type = GameState->AStarGrid->Map[i][j].MovementCost == 1 ? ROAD_TILE : TOWER_TILE;
 			GameState->AStarGrid->Map[i][j].f = -1;
+			GameState->AStarGrid->Map[i][j].g = 0.0;
+            GameState->AStarGrid->Map[i][j].h = 0.0;
 		}
 	} 
 
@@ -232,10 +281,10 @@ game_state * CreateGameState(is_open_cell_function function)
 void DestroyGameState(game_state *GameState)
 {
 	free(GameState->Tilemap.Tiles);
-	// for (int i = 0; i < GameState->AStarGrid->NumberRows; i++) {
-	// 	free(GameState->AStarGrid->Map[i]);
-	// }
-	// free(GameState->AStarGrid->Map);
+	for (int i = 0; i < GameState->AStarGrid->NumberRows; i++) {
+		free(GameState->AStarGrid->Map[i]);
+	}
+	free(GameState->AStarGrid->Map);
 	free(GameState);
 }
 
