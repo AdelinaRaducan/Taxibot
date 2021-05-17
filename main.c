@@ -27,9 +27,10 @@
 #include "nuklear.h"
 #include "nuklear_sdl_sdlrenderer.h"
 #include "overview.c"
-#include "aStar.h"
+#include "aStar.c"
 
 #define forever while(1)
+#define MS_PER_FRAME 16
 
 const int SCREEN_WIDTH_PIXELS = 1280;
 const int SCREEN_HEIGHT_PIXELS = 720;
@@ -54,6 +55,13 @@ typedef struct tilemap {
 	tile *Tiles;
 	int Width, Height;
 } tilemap;
+
+typedef struct taxi {
+	double X;
+	double Y;
+	double Speed;
+	int Direction;
+} taxi;
 
 typedef struct game_state {
 	tilemap Tilemap;
@@ -148,41 +156,99 @@ void HandleInput(game_state *GameState)
 	nk_input_end(WindowManager.Nuklear);
 }
 
-Tstack *Path = NULL;
-void Update(game_state *GameState)
-{
-	point Start = {rand()%(GameState->AStarGrid->NumberRows + 1), rand()%(GameState->AStarGrid->NumberCols + 1)};
-	point End = {rand()%(GameState->AStarGrid->NumberRows + 1), rand()%(GameState->AStarGrid->NumberCols + 1)};
-	Path = FindPath(Start, End, GameState->AStarGrid);
-}
-
-void DrawRectangle(SDL_FRect r)
-{	
-    r.y = SCREEN_HEIGHT_PIXELS - r.y;
-    SDL_SetRenderDrawColor( WindowManager.Renderer, 0, 120, 255, 255 );
-    SDL_RenderFillRectF( WindowManager.Renderer, &r );
-}
-
-void DrawPath()
-{
-	while (!IsStackEmpty(Path)) {
-		cell Cell = PopStack(&Path)->Data;
-		// printf("(%d %d)  ----- ", Cell.Location.Row, Cell.Location.Col);
-		SDL_FRect r = {.x = TILE_SIZE_PIXELS * Cell.Location.Row, 
-					   .y = TILE_SIZE_PIXELS * Cell.Location.Col, 
-					   .w = TILE_SIZE_PIXELS, .h = TILE_SIZE_PIXELS};
-		DrawRectangle(r);	
-		// printf("r.x = %.0f r.y = %0.f\n", r.x, r.y);
+int GetTaxiDirection(point Start, point End) {
+	if (End.Row - Start.Row > 0) {
+		return 1;
+	} else if (End.Row - Start.Row < 0) {
+		return -1;
+	} else {
+		if (End.Col - Start.Col > 0) {
+			return 1;
+		} else {
+			return -1;
+		}
 	}
 }
 
-void Draw(game_state *GameState)
+Tstack *Path = NULL;
+Tstack *TaxiPath = NULL;
+taxi Taxi = {};
+void Update(game_state *GameState)
 {
+	if (TaxiPath == NULL) {
+		point Start = {rand() % (GameState->AStarGrid->NumberRows + 1), rand() % (GameState->AStarGrid->NumberCols + 1)};
+		point End = {rand() % (GameState->AStarGrid->NumberRows + 1), rand() % (GameState->AStarGrid->NumberCols + 1)};
+		
+		// point Start = {33, 43};
+		// point End = {44, 33};
+
+		DestroyStack(&Path);
+		Path = FindPath(Start, End, GameState->AStarGrid);
+		// PrintStack(&Path);
+		ClonePath();
+	}
+
+	if (TaxiPath != NULL) {
+		cell Cell = PopStack(&TaxiPath)->Data;
+		Taxi.X = Cell.Location.Row; 
+		Taxi.Y = Cell.Location.Col;
+	}
+}
+
+void DrawRectangle(SDL_FRect r, int R, int G, int B)
+{	
+    r.y = SCREEN_HEIGHT_PIXELS - r.y - TILE_SIZE_PIXELS;
+    SDL_SetRenderDrawColor( WindowManager.Renderer, R, G, B, 255 );
+    SDL_RenderFillRectF( WindowManager.Renderer, &r );
+}
+
+void DrawPath(Tstack **FoundPath)
+{	
+	Tstack *temp = *FoundPath;
+	while (temp != NULL) {
+		cell Cell = temp->Data;
+		SDL_FRect r = {.x = TILE_SIZE_PIXELS * Cell.Location.Col, 
+					   .y = TILE_SIZE_PIXELS * Cell.Location.Row, 
+					   .w = TILE_SIZE_PIXELS, .h = TILE_SIZE_PIXELS};
+		DrawRectangle(r, 0, 0, 205);	
+		temp = temp->next;
+	}
+}
+
+void ClonePath() 
+{
+	Tstack *temp = NULL;;
+	while (!IsStackEmpty(Path)) {
+		cell Cell = PopStack(&Path)->Data;
+		PushStack(&temp, Cell);
+	}
+
+	while (!IsStackEmpty(temp)) {
+		cell Cell = PopStack(&temp)->Data;
+		PushStack(&Path, Cell);
+		PushStack(&TaxiPath, Cell);
+	}
+}
+
+
+
+void DrawTaxi() 
+{			   
+	SDL_FRect r = {.x = TILE_SIZE_PIXELS * Taxi.Y, 
+				   .y = TILE_SIZE_PIXELS * Taxi.X, 
+				   .w = TILE_SIZE_PIXELS, .h = TILE_SIZE_PIXELS};
+
+	DrawRectangle(r, 255, 105, 180);
+}
+
+void Draw(game_state *GameState)
+{	
 	StartDrawing();
 	{	
 		DrawTilemap(&GameState->Tilemap);
-		DrawPath();
-		DrawGUI(GameState);
+		DrawPath(&Path); 
+		DrawTaxi();
+		// DrawGUI(GameState);
 	}
 	EndDrawing();
 }
@@ -194,7 +260,7 @@ void DrawGUI(game_state *GameState)
 
 void StartDrawing()
 {
-	SDL_SetRenderDrawColor(WindowManager.Renderer, 255, 25, 0, 255);
+	SDL_SetRenderDrawColor(WindowManager.Renderer, 192, 192, 192, 255);
     SDL_RenderClear(WindowManager.Renderer);
 }
 
@@ -229,9 +295,7 @@ void DrawTilemap(tilemap *Tilemap)
 					   		   .y = TILE_SIZE_PIXELS * j, 
 					   		   .w = TILE_SIZE_PIXELS, .h = TILE_SIZE_PIXELS};
 
-			    r.y = SCREEN_HEIGHT_PIXELS - r.y;
-			    SDL_SetRenderDrawColor( WindowManager.Renderer, 0, 0, 0, 255 );
-			    SDL_RenderFillRectF( WindowManager.Renderer, &r );
+			    DrawRectangle(r, 0, 0, 0);
 			}
 		}
 	}
@@ -264,6 +328,7 @@ game_state * CreateGameState(is_open_cell_function function)
 		for (int j = 0; j < GameState->AStarGrid->NumberCols; j++) {
 			if (i % 5 == 0 || j % 10 == 0) {
 				GameState->AStarGrid->Map[i][j].MovementCost = my_random_function();
+			
 			} else {
 				GameState->AStarGrid->Map[i][j].MovementCost = 1;
 			}
@@ -296,9 +361,6 @@ bool IsOpenCellFunction(point Location, void *AStarGrid) {
 	}	
 }
 
-
-// calculatePath(random start node, random end node)
-// drawPath(path *)
 
 
 

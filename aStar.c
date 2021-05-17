@@ -1,112 +1,11 @@
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
-#include <float.h>
-#include <math.h>
-#include <stdbool.h>
-
-typedef struct point {
-    int Row;
-    int Col;
-} point;
-
-typedef struct cell {
-    double g, f, h;
-    point Location;
-    int MovementCost;
-} cell;
-
-typedef struct queue {
-    cell Data;
-    struct queue *next;
-} Tqueue;
-
-typedef struct stack {
-    cell Data;
-    struct stack *next;
-} Tstack;
-
-typedef bool (*is_open_cell_function)(point, void*);
-
-typedef struct astar_grid {
-    int NumberRows, NumberCols;
-    cell **Map;
-    is_open_cell_function IsOpenCellFunction;
-} astar_grid;
-
-Tstack *            FindPath(point Start, point End, astar_grid *Grid);
-
-static cell *       GetCell(point Location, astar_grid *Grid);
-static bool         EqualPoints(point PointA, point PointB);
-static bool         IsNeighbour(point Location, point Neighbour, astar_grid *Grid);
-double              CalculateHeuristic(point Source, point Dest, cell Node);
-Tstack*             TracePath(point Dest, astar_grid *Grid);
-Tqueue*             NewQueueNode(cell Node);
-Tqueue*             PeekQueue(Tqueue **Queue);
-Tqueue*             PopQueue(Tqueue **Queue);
-void                PushQueue(Tqueue **Queue, cell Node);
-int                 IsQueueEmpty(Tqueue *Queue);
-void                DestroyQueue(Tqueue **Queue);
-Tstack*             NewStackNode(cell Node);
-Tstack*             PeekStack(Tstack **Stack);
-Tstack*             PopStack(Tstack **Stack);
-void                PushStack(Tstack **Stack, cell Node);
-int                 IsStackEmpty(Tstack *Stack);
-void                PrintQueue(Tqueue **Queue);
-void                PrintStack(Tstack *Stack);
-bool                IsOpenCellFunction(point Location, void *AStarGrid);
-astar_grid          InitializeGrid(int Rows, int Cols, is_open_cell_function function);
-
-
-int main(int argc, char const *argv[]) {
-    astar_grid grid = InitializeGrid(10, 10, IsOpenCellFunction);
-
-    point Start = {0, 0};
-    point End = {2, 2};
-    Tstack *Path = FindPath(Start, End, &grid);
-    while(!IsStackEmpty(Path)) {
-        Tstack *temp = PopStack(&Path);
-        printf("(%d %d)\n", temp->Data.Location.Row, temp->Data.Location.Col);
-        free(temp);
-    }
-
-    return 0;
-}
-
-astar_grid InitializeGrid(int Rows, int Cols, is_open_cell_function function) {
-    astar_grid grid;
-    grid.NumberRows = Rows;
-    grid.NumberCols = Cols;
-    grid.IsOpenCellFunction = function;
-    grid.Map = malloc(grid.NumberRows * sizeof(cell*));
-
-    for (int i = 0; i < grid.NumberRows; i++) {
-        grid.Map[i] = calloc(grid.NumberCols, sizeof(cell));
-    }
-    
-    for (int i = 0; i < Rows; i++) {
-        for (int j = 0; j < Cols; j++) {
-            grid.Map[i][j].MovementCost = 1;
-            grid.Map[i][j].f = -1;
-        }
-    }
-
-    return grid;
-}
-
-bool IsOpenCellFunction(point Location, void *AStarGrid) {
-    if ((((astar_grid*)(AStarGrid))->Map[Location.Row][Location.Col].MovementCost) == 1) {
-        return true;
-    } else {
-        return false;
-    }   
-}
+#include "aStar.h"
 
 cell * GetCell(point Location, astar_grid *Grid) {
-    if ((Location.Row >= 0) && (Location.Row < Grid->NumberRows)
-         && (Location.Col >= 0) && (Location.Col < Grid->NumberCols)) {
+    if ((Location.Row >= 0) && (Location.Row < Grid->NumberCols)
+         && (Location.Col >= 0) && (Location.Col < Grid->NumberRows)) {
         return &Grid->Map[Location.Row][Location.Col];
     }
+    
     return NULL;
 }
 
@@ -239,17 +138,26 @@ Tstack * PopStack(Tstack **Stack) {
     return Temp;
 }
 
-void PrintStack(Tstack *Stack) {
-    Tstack *Temp = Stack;
+void PrintStack(Tstack **Stack) {
+    Tstack *Temp = *Stack;
     while (Temp != NULL) {
         printf("-> (%d,%d) ", Temp->Data.Location.Row, Temp->Data.Location.Col);
         Temp = Temp->next;
     }
 }
 
+void DestroyStack(Tstack **Stack) {
+    Tstack *Temp = NULL;
+    while((*Stack) != NULL) {
+        Temp = *Stack;
+        (*Stack) = (*Stack)->next;
+        free(Temp);
+    }
+
+   *Stack = NULL;
+}
+
 Tstack * TracePath(point Dest, astar_grid *Grid) {
-    printf("\nThe Path is: \n");
- 
     Tstack *stack = NULL;
  
     int r = Dest.Row;
@@ -307,6 +215,13 @@ Tstack * FindPath(point Start, point End, astar_grid *Grid) {
         return NULL;
     }
 
+    for (int i = 0; i < Grid->NumberRows; i++) {
+        for (int j = 0; j < Grid->NumberCols; j++) {
+            Grid->Map[i][j].f = -1;
+            Grid->Map[i][j].g = 0.0;
+            Grid->Map[i][j].h = 0.0;
+        }
+    }
     point RefCoord = {Start.Row, Start.Col};
     Grid->Map[Start.Row][Start.Col].Location.Row = RefCoord.Row;
     Grid->Map[Start.Row][Start.Col].Location.Col = RefCoord.Col;
@@ -353,11 +268,11 @@ Tstack * FindPath(point Start, point End, astar_grid *Grid) {
                     if (EqualPoints(Neighbour, End)) {
                         Grid->Map[Neighbour.Row][Neighbour.Col].Location.Row = RefCoord.Row;
                         Grid->Map[Neighbour.Row][Neighbour.Col].Location.Col = RefCoord.Col;
-                        printf("The Destination cell is found\n");
+                        printf("The Destination cell has been found\n");
                         Tstack *FinalPath  = TracePath(End, Grid);
                         DestroyQueue(&OpenList);
                         return FinalPath;
-                    } else if (!ClosedList[Neighbour.Row][Neighbour.Col] && Graph->IsOpenCellFunction(Neighbour, (void*)(Grid))) {
+                    } else if (!ClosedList[Neighbour.Row][Neighbour.Col] && Grid->IsOpenCellFunction(Neighbour, (void*)(Grid))) {
                         double fNew = CalculateHeuristic(Neighbour, End, Grid->Map[RefCoord.Row][RefCoord.Col]);
 
                         if (Grid->Map[Neighbour.Row][Neighbour.Col].f > fNew || 
