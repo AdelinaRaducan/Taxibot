@@ -60,7 +60,7 @@ typedef struct taxi {
 	double X;
 	double Y;
 	double Speed;
-	int Direction;
+	int DirectionX, DirectionY;
 } taxi;
 
 typedef struct game_state {
@@ -83,6 +83,9 @@ void StartDrawing();
 void EndDrawing();
 void DrawTilemap(tilemap *Tilemap);
 bool IsOpenCellFunction(point Location, void *AStarGrid);
+int  GetTaxiDirectionX(point Point, taxi Taxi);
+int  GetTaxiDirectionY(point Point, taxi Taxi);
+int  MoveTowardsPoint(point Point, taxi Taxi);
 
 int main( int argc, char* args[] ) {
 	srand(time(NULL));
@@ -156,42 +159,43 @@ void HandleInput(game_state *GameState)
 	nk_input_end(WindowManager.Nuklear);
 }
 
-int GetTaxiDirection(point Start, point End) {
-	if (End.Row - Start.Row > 0) {
-		return 1;
-	} else if (End.Row - Start.Row < 0) {
-		return -1;
-	} else {
-		if (End.Col - Start.Col > 0) {
-			return 1;
-		} else {
-			return -1;
-		}
-	}
-}
-
 Tstack *Path = NULL;
 Tstack *TaxiPath = NULL;
-taxi Taxi = {};
+taxi Taxi = {0, 0, 2.0};
+point Point = {0, 0};
+int first = 0;
 void Update(game_state *GameState)
-{
-	if (TaxiPath == NULL) {
+{	
+	if (TaxiPath == NULL && MoveTowardsPoint(Point, Taxi) == 1) {
 		point Start = {rand() % (GameState->AStarGrid->NumberRows + 1), rand() % (GameState->AStarGrid->NumberCols + 1)};
 		point End = {rand() % (GameState->AStarGrid->NumberRows + 1), rand() % (GameState->AStarGrid->NumberCols + 1)};
-		
-		// point Start = {33, 43};
-		// point End = {44, 33};
+
+		Taxi.X = 0;
+		Taxi.Y = 0;
+		Point.Row = 0;
+		Point.Col = 0;
+		first = 0;
 
 		DestroyStack(&Path);
 		Path = FindPath(Start, End, GameState->AStarGrid);
-		// PrintStack(&Path);
 		ClonePath();
 	}
 
-	if (TaxiPath != NULL) {
-		cell Cell = PopStack(&TaxiPath)->Data;
-		Taxi.X = Cell.Location.Row; 
-		Taxi.Y = Cell.Location.Col;
+	if (TaxiPath != NULL || MoveTowardsPoint(Point,Taxi) == 0) {
+		if (MoveTowardsPoint(Point, Taxi) == 1) {
+			Point  = PopStack(&TaxiPath)->Data.Location;
+		} 
+
+		if (first == 0) {
+			Taxi.X = Point.Row * TILE_SIZE_PIXELS;
+			Taxi.Y = Point.Col * TILE_SIZE_PIXELS;
+			first++;
+		}
+
+		Taxi.DirectionX = GetTaxiDirectionX(Point, Taxi);
+		Taxi.DirectionY = GetTaxiDirectionY(Point, Taxi);
+		Taxi.X += Taxi.DirectionX * Taxi.Speed; 
+		Taxi.Y += Taxi.DirectionY * Taxi.Speed;
 	}
 }
 
@@ -230,15 +234,46 @@ void ClonePath()
 	}
 }
 
+int GetTaxiDirectionX(point Point, taxi Taxi) {
+	if (Point.Row * TILE_SIZE_PIXELS - Taxi.X > 0) {
+		return 1;
+	} else if (Point.Row * TILE_SIZE_PIXELS - Taxi.X < 0) {
+		return -1;
+	} 
+
+	return 0;
+}
+
+int GetTaxiDirectionY(point Point, taxi Taxi) {
+	if (Point.Col * TILE_SIZE_PIXELS - Taxi.Y > 0) {
+		return 1;
+	} else if (Point.Col * TILE_SIZE_PIXELS - Taxi.Y < 0) {
+		return -1;
+	}
+
+	return 0;
+
+}
+
+int MoveTowardsPoint(point Point, taxi Taxi) 
+{	
+	if (Point.Row * TILE_SIZE_PIXELS == Taxi.X && Point.Col * TILE_SIZE_PIXELS == Taxi.Y) {
+		return 1;
+	}
+
+	return 0;
+}
 
 
 void DrawTaxi() 
-{			   
-	SDL_FRect r = {.x = TILE_SIZE_PIXELS * Taxi.Y, 
-				   .y = TILE_SIZE_PIXELS * Taxi.X, 
-				   .w = TILE_SIZE_PIXELS, .h = TILE_SIZE_PIXELS};
+{	
+	if (Path != NULL) { 		   
+		SDL_FRect r = {.x = Taxi.Y, 
+					   .y = Taxi.X, 
+					   .w = TILE_SIZE_PIXELS, .h = TILE_SIZE_PIXELS};
 
-	DrawRectangle(r, 255, 105, 180);
+		DrawRectangle(r, 255, 105, 180);
+	}
 }
 
 void Draw(game_state *GameState)
@@ -248,7 +283,7 @@ void Draw(game_state *GameState)
 		DrawTilemap(&GameState->Tilemap);
 		DrawPath(&Path); 
 		DrawTaxi();
-		// DrawGUI(GameState);
+		DrawGUI(GameState);
 	}
 	EndDrawing();
 }

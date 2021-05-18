@@ -141,7 +141,7 @@ Tstack * PopStack(Tstack **Stack) {
 void PrintStack(Tstack **Stack) {
     Tstack *Temp = *Stack;
     while (Temp != NULL) {
-        printf("-> (%d,%d) ", Temp->Data.Location.Row, Temp->Data.Location.Col);
+        printf("-> (%d,%d)", Temp->Data.Location.Row, Temp->Data.Location.Col);
         Temp = Temp->next;
     }
 }
