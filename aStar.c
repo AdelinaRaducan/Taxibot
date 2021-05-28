@@ -1,9 +1,9 @@
 #include "aStar.h"
 
-cell * GetCell(point Location, astar_grid *Grid) {
-    if ((Location.Row >= 0) && (Location.Row < Grid->NumberCols)
-         && (Location.Col >= 0) && (Location.Col < Grid->NumberRows)) {
-        return &Grid->Map[Location.Row][Location.Col];
+cell * GetCell(int X, int Y, astar_grid *Grid) {
+    if ((X >= 0) && (X < Grid->NumberRows)
+         && (Y >= 0) && (Y < Grid->NumberCols)) {
+        return &Grid->Map[X][Y];
     }
     
     return NULL;
@@ -16,7 +16,7 @@ bool EqualPoints(point PointA, point PointB) {
 }
 
 bool IsNeighbour(point Location, point Neighbour, astar_grid *Grid) {
-    if (GetCell(Neighbour, Grid) == NULL) 
+    if (GetCell(Neighbour.Row, Neighbour.Col, Grid) == NULL) 
         return false;
 
     if (Location.Col == Neighbour.Col && (Location.Row == Neighbour.Row + 1 || Location.Row == Neighbour.Row - 1))
@@ -33,69 +33,113 @@ double CalculateHeuristic(point Source, point Dest, cell Node) {
     return (gNew + hNew);
 }
 
-void PrintQueue(Tqueue **Queue) {
-    Tqueue *Temp = *Queue;
+void InitQueue(Tqueue *Queue, size_t memSize, compare_function Function)
+{
+   Queue->CompareFunction = Function;
+   Queue->memSize = memSize;
+   Queue->head  = NULL;
+}
+
+void PrintQueue(Tqueue *Queue) {
+    node *Temp = Queue->head;
     while (Temp != NULL) {
-        printf("r:%d c:%d f:%.2f\n", Temp->Data.Location.Row, Temp->Data.Location.Col, Temp->Data.f);
+        printf("(%d %d %.0f)->", ((cell*)((Temp)->Data))->Location.Row, ((cell*)((Temp)->Data))->Location.Col, ((cell*)((Temp)->Data))->f);
         Temp = Temp->next;
     }
 }
 
-Tqueue * NewQueueNode(cell Node) {
-    Tqueue *NewNode = malloc(sizeof(Tqueue));
-    NewNode->Data.f = Node.f;
-    NewNode->Data.Location.Row = Node.Location.Row;
-    NewNode->Data.Location.Col = Node.Location.Col;
-    NewNode->next = NULL;
-
-    return NewNode;
-}
-
-void PushQueue(Tqueue **Queue, cell Node) {
-    Tqueue *NewNode = NewQueueNode(Node);
-    Tqueue *Start = *Queue;
-    if (IsQueueEmpty(*Queue)) {
-        (*Queue) = NewNode;
-        return;
-    }
-
-    if ((*Queue)->Data.f > NewNode->Data.f) {
-        NewNode->next = *Queue;
-        (*Queue) = NewNode;
-    } else {
-        while (Start->next != NULL && Start->next->Data.f < NewNode->Data.f) {
-            Start = Start->next;
-        }
-
-        NewNode->next = Start->next;
-        Start->next = NewNode;
-    }
-}
-
-Tqueue * PeekQueue(Tqueue **Queue) {
-    return (*Queue);
-}
-
-Tqueue * PopQueue(Tqueue **Queue) { 
-    Tqueue *Temp = (*Queue);
-    (*Queue) = (*Queue)->next;
-
-    return Temp;
-}
-
-int IsQueueEmpty(Tqueue *Queue) {
-    if (Queue == NULL) 
+int ComparePriority(const void *x1, const void *x2) {
+    if (((cell*)(((node*)(x1))->Data))->f > ((cell*)(x2))->f)
         return 1;
     return 0;
 }
 
-void DestroyQueue(Tqueue **Queue) {
-    Tqueue *Temp = NULL;
-    while((*Queue) != NULL) {
-        Temp = *Queue;
-        (*Queue) = (*Queue)->next;
-        free(Temp);
+void PushQueue(Tqueue *Queue, void* data) {
+    node *newNode = (node*) malloc(sizeof(node));
+    node *temp = Queue->head;
+
+    if(newNode == NULL) {
+        return -1;
     }
+
+    newNode->Data = malloc(Queue->memSize);
+
+    if(newNode->Data == NULL) {
+        free(newNode);
+        return -1;
+    }
+
+    newNode->next = NULL;
+
+    memcpy(newNode->Data, data, Queue->memSize);
+
+    if(IsQueueEmpty(Queue)) {
+        Queue->head  = newNode;
+    } else {
+        if (Queue->CompareFunction == NULL) {
+            newNode->next = Queue->head;
+            Queue->head = newNode;
+            return;
+        }
+
+        if (Queue->CompareFunction((void*)(temp), data) == 1) {
+            newNode->next = Queue->head;
+            Queue->head = newNode;
+        } else {
+            while (temp->next != NULL && Queue->CompareFunction((void*)(temp), data) == 0) {
+                temp = temp->next;
+            }
+
+            newNode->next = temp->next;
+            temp->next = newNode;
+        }
+    }
+}
+
+void PeekQueue(Tqueue *Queue, void *data) {
+   if(!IsQueueEmpty(Queue)) {
+       node *temp = Queue->head;
+       memcpy(data, temp->Data, Queue->memSize);
+    }
+}
+
+void PopQueue(Tqueue *Queue) { 
+    if(!IsQueueEmpty(Queue)) {
+        node *temp = Queue->head;
+        // memcpy(data, temp->data, Queue->memSize);
+
+        if(Queue->head->next != NULL) {
+            Queue->head = Queue->head->next;
+        } else {
+            Queue->head = NULL;
+        }
+
+        free(temp->Data);
+        free(temp);
+    }
+}
+
+void IterateQueue(Tqueue *Queue) {
+
+}
+
+int IsQueueEmpty(Tqueue *Queue) {
+    if (Queue->head == NULL) 
+        return 1;
+    return 0;
+}
+
+void DestroyQueue(Tqueue *Queue) {
+    node *temp;
+
+     while(!IsQueueEmpty(Queue)) {
+        temp = Queue->head;
+        Queue->head = temp->next;
+        free(temp->Data);
+        free(temp);
+    }
+
+    Queue->head = NULL;
 }
 
 Tstack * NewStackNode(cell Node) {
@@ -109,6 +153,7 @@ Tstack * NewStackNode(cell Node) {
 
     return NewNode;
 }
+
 
 int IsStackEmpty(Tstack *Stack) {
     if (Stack == NULL) 
@@ -138,8 +183,8 @@ Tstack * PopStack(Tstack **Stack) {
     return Temp;
 }
 
-void PrintStack(Tstack **Stack) {
-    Tstack *Temp = *Stack;
+void PrintStack(Tstack *Stack) {
+    Tstack *Temp = Stack;
     while (Temp != NULL) {
         printf("-> (%d,%d)", Temp->Data.Location.Row, Temp->Data.Location.Col);
         Temp = Temp->next;
@@ -180,11 +225,11 @@ Tstack * TracePath(point Dest, astar_grid *Grid) {
 }
 
 bool ElementIsInOpenList(Tqueue *Queue, cell Node) {
-    Tqueue *Temp = Queue;
+    node *Temp = Queue->head;
     while (Temp != NULL) {
-        if (Temp->Data.f == Node.f 
-            && (Temp->Data.Location.Row == Node.Location.Row) 
-            && (Temp->Data.Location.Col == Node.Location.Col)) {
+        if (((cell*)((Temp)->Data))->f == Node.f 
+            && (((cell*)((Temp)->Data))->Location.Row == Node.Location.Row) 
+            && (((cell*)((Temp)->Data))->Location.Col == Node.Location.Col)) {
             return true;
         }
 
@@ -195,12 +240,12 @@ bool ElementIsInOpenList(Tqueue *Queue, cell Node) {
 }
 
 Tstack * FindPath(point Start, point End, astar_grid *Grid) {
-    if (GetCell(Start, Grid) == NULL) {
+    if (GetCell(Start.Row, Start.Col, Grid) == NULL) {
         printf("Invalid source\n");
         return NULL;
     }
 
-    if (GetCell(End, Grid) == NULL) {
+    if (GetCell(End.Row, End.Col, Grid) == NULL) {
         printf("Invalid Destination\n");
         return NULL;
     }
@@ -229,18 +274,20 @@ Tstack * FindPath(point Start, point End, astar_grid *Grid) {
     Grid->Map[Start.Row][Start.Col].g = 0.0;
     Grid->Map[Start.Row][Start.Col].h = 0.0;
 
-    Tqueue *OpenList = NULL;
+    Tqueue OpenList;
+    InitQueue(&OpenList, sizeof(cell), ComparePriority);
+
     bool ClosedList[Grid->NumberRows][Grid->NumberCols];
     memset(ClosedList, false, sizeof(ClosedList));
 
-    PushQueue(&OpenList, Grid->Map[Start.Row][Start.Col]);
+    PushQueue(&OpenList, &Grid->Map[Start.Row][Start.Col]);
 
-    while (!IsQueueEmpty(OpenList)) {
-        Tqueue *PeekedCell = PeekQueue(&OpenList);
-        RefCoord.Row = PeekedCell->Data.Location.Row;
-        RefCoord.Col = PeekedCell->Data.Location.Col;
-        Tqueue *PoopedCell = PopQueue(&OpenList);
-        free(PoopedCell);
+    while (!IsQueueEmpty(&OpenList)) {
+        cell PeekedCell;
+        PeekQueue(&OpenList, &PeekedCell);
+        RefCoord.Row = PeekedCell.Location.Row;
+        RefCoord.Col = PeekedCell.Location.Col;
+        PopQueue(&OpenList);
         ClosedList[RefCoord.Row][RefCoord.Col] = true;
 
         /*
@@ -281,7 +328,7 @@ Tstack * FindPath(point Start, point End, astar_grid *Grid) {
                             Grid->Map[Neighbour.Row][Neighbour.Col].Location.Row = Neighbour.Row;
                             Grid->Map[Neighbour.Row][Neighbour.Col].Location.Col = Neighbour.Col;
                             Grid->Map[Neighbour.Row][Neighbour.Col].f = fNew;
-                            PushQueue(&OpenList, Grid->Map[Neighbour.Row][Neighbour.Col]);
+                            PushQueue(&OpenList, &Grid->Map[Neighbour.Row][Neighbour.Col]);
 
                             // Update the details of this cell
                             Grid->Map[Neighbour.Row][Neighbour.Col].g = Grid->Map[RefCoord.Row][RefCoord.Col].g + 1.0;
