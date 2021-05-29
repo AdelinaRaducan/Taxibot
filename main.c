@@ -63,11 +63,12 @@ typedef enum command_type {
 } command_type;
 
 typedef enum taxibot_status {
-	AVAILABLE,
-	WORKING,
-	CHARGING,
-	TO_ORDER_LOCATION,
-	TO_DESTINATION
+	TAXIBOT_AVAILABLE,
+	TAXIBOT_WORKING,
+	TAXIBOT_RECEIVED_ORDER,
+	TAXIBOT_TO_ORDER,
+	TAXIBOT_TO_DEST,
+	TAXIBOT_CHARGING
 } taxibot_status;
 
 typedef struct v2 {
@@ -98,13 +99,16 @@ typedef struct order {
 	passenger_status Status;
 } order;
 
+typedef struct taxibot_dispatcher;
+
 typedef struct taxibot {
 	v2 Position;
 	double Speed;
 	int DirectionX, DirectionY;
-	order *Order;
+	order Order;
 	taxibot_status Status;
 	Tstack *Path;
+	struct taxibot_dispatcher *Dispatcher;
 } taxibot;
 
 typedef struct depot {
@@ -140,9 +144,12 @@ void UpdateAndRenderPlay(game_state *GameState);
 
 void Update(game_state *GameState);
 void UpdateDispatcher(taxibot_dispatcher *Dispatcher, astar_grid *AStarGrid);
+void DispatcherRemoveOrder(taxibot_dispatcher *Dispatcher, order Order);
+
 void UpdateOrder(order *Order);
 void UpdateTaxibot(taxibot *Taxibot, astar_grid *AStarGrid);
 void UpdateTaxibots(taxibot *Taxibots, int TaxibotsLength, astar_grid *AStarGrid);
+void TaxibotFollowPath(taxibot *Taxibot, Tstack *Path);
 
 void Draw(game_state *GameState);
 void StartDrawing();
@@ -156,13 +163,12 @@ void DrawTaxibot(taxibot *Taxibot);
 void DrawTaxibots(taxibot *Taxibots, int TaxibotsLength);
 
 void AddTaxibot(taxibot *Taxibot, int *TaxibotsLength, depot *Depots);
-void AssignOrderToTaxibot(taxibot *Taxibot, order *Order);
+void AssignOrderToTaxibot(taxibot *Taxibot, order Order);
 bool IsOpenCellFunction(point Location, void *AStarGrid);
 int  CompareOrders(const void *OrderA, const void *OrderB);
 int  MoveTowardsPoint(v2 Position, taxibot Taxibot);
 point CreatePoint(v2 Position);
-point FindParkingSpot(astar_grid *AStarGrid, v2 Point);
-void FilterCommands(Tqueue *Queue);
+point FindParkingSpot(v2 Point, astar_grid *AStarGrid);
 
 void DestroyDispatcher(taxibot_dispatcher *Dispatcher);
 void DestroyAStarGrid(astar_grid * AStarGrid);
@@ -273,14 +279,17 @@ taxibot_dispatcher * CreateDispatcher()
 {
 	taxibot_dispatcher *Dispatcher = (taxibot_dispatcher *) malloc(sizeof(taxibot_dispatcher));
 	Dispatcher->Taxibots = (taxibot *) malloc (MAX_NUMBER_OF_TAXIBOTS * sizeof(taxibot));
-	for (int i = 0; i < MAX_NUMBER_OF_TAXIBOTS; i++) {
-		Dispatcher->Taxibots[i].Order = NULL;
+	for (int i = 0; i < MAX_NUMBER_OF_TAXIBOTS; ++i) {
+		Dispatcher->Taxibots[i].Dispatcher = Dispatcher;
 	}
 
 	Dispatcher->TaxibotsLength = 0;
 	Dispatcher->Depots = (depot *) malloc(MAX_NUMBER_OF_DEPOTS * sizeof(depot));
 	Dispatcher->DepotsLength = 0;
+
 	CreateDepots(Dispatcher->Depots);
+
+	// init orders
 	InitQueue(&Dispatcher->Orders, sizeof(order), NULL);
 	Dispatcher->OrdersLength = 0;
 	return Dispatcher;
@@ -294,33 +303,6 @@ void CreateDepots(depot *Depots)
 	Depots[1].Position.X = 44;
 	Depots[1].Position.Y = 79;
 }
-
-// TODO 0.0: Make use of the brain!!!! We code small and test frequently!!!!
-// TODO 0.1: First I implement the adding of taxibots, and I test if the drawing is ok with only 1 taxibot
-// TODO 0.2: I implement adding order at random places, I test that are drawed correctly
-// TODO 0.3: With only 1 taxibot the dispatcher should give him order after order!!!!!!!!!!!!!!!!!!!!!!
-// TODO 0.4: After I test with 2 taxibots and 1 command
-// TODO 0.5: After I test with 2 taxibots and 2 command
-
-
-// TODO 2: define AddTaxibot function, don't forget about TaxibotLength++ 
-
-// TODO 3.0: an order should have a timestamp field, based on that we compare orders priority
-// TODO 3: define CreateOrder, push to queue, first every order should be in WAITING status
-
-// TODO 3.1: define DrawTaxibot(taxibot *TAxibot)
-// TODO 3.2: define DrawOrder(order *Order)
-
-// TODO 4: When I press a button, a new taxibot is created & starts from a depot location -> SDL how to read keyboards pressed
-
-// TODO 5: When I press a button, an order is created at a random spot
-
-// TODO 6: At each update the dispatcher delegates orders to taxibots
-// TODO 6.1: Delegates == pop an order from the queue based on priority !!!!ONLY!!!! if it has available/free taxibots
-// TODO 6.2: If I have more available taxibots who I assign the order? Who is the closest!!! Functie proasta care face diff pe pozitii
-
-// TODO 6.3: TOATE FUNCTIILE DE CREATE SUCCESIVE, TOATE DE UPDATE SUCCESIVE, TOATE DE DRAW SUCCESIVE, TOATE DE DESTROY SUCCESIVE...IN ORDINEA ASTA
-// TODO 6.4: FUNCTIILE PRINCIPALE DE UPDATE, DRAW, SA NU CONTINA MAI MULT DE 10 LINII....DEFINESTE FUNCTII!!!!!!!!
 
 void UpdateAndRenderPlay(game_state *GameState)
 {
@@ -347,12 +329,10 @@ void HandleInput(game_state *GameState)
     		switch (event.key.keysym.sym) {
     			case SDLK_RETURN:
 	    			PushQueue(&GameState->Commands, &(command_type){ADD_TAXIBOT});
-			    	printf("<RETURN> is pressed.\n");
 			    	break;
 
 			    case SDLK_o:
 		    		PushQueue(&GameState->Commands, &(command_type){ADD_ORDER});
-				    printf("<O> is pressed.\n");
 				    break;
     		}
     	}
@@ -387,6 +367,7 @@ void Update(game_state *GameState)
 	}
 
 	UpdateDispatcher(GameState->Dispatcher, GameState->AStarGrid);
+	UpdateTaxibots(GameState->Dispatcher->Taxibots, GameState->Dispatcher->TaxibotsLength, GameState->AStarGrid);
 }
 
 void Draw(game_state *GameState)
@@ -404,70 +385,30 @@ void Draw(game_state *GameState)
 
 void UpdateDispatcher(taxibot_dispatcher *Dispatcher, astar_grid *AStarGrid) 
 {	
-	if (!IsQueueEmpty(&Dispatcher->Orders)) {
-		FilterCommands(&Dispatcher->Orders);
-	} 
-
 	if (IsQueueEmpty(&Dispatcher->Orders)) {
 		return;
 	}
-
-
-	Tqueue CloneOrders;
-	InitQueue(&CloneOrders, sizeof(order), NULL);
-	CloneQueue(&Dispatcher->Orders, &CloneOrders);
 
 	for (int i = 0; i < Dispatcher->TaxibotsLength; i++) {
 		if (IsQueueEmpty(&Dispatcher->Orders)) {
 			break;
 		}
 
-		if (Dispatcher->Taxibots[i].Status == AVAILABLE) {
-			order Order = {0};
-			PeekQueue(&CloneOrders, &Order);
-			PopQueue(&CloneOrders);
+		if (Dispatcher->Taxibots[i].Status == TAXIBOT_AVAILABLE) {
+			order aux = {};
+			PeekQueue(&Dispatcher->Orders, &aux);
 			PopQueue(&Dispatcher->Orders);
-			AssignOrderToTaxibot(&Dispatcher->Taxibots[i], &Order);
+			AssignOrderToTaxibot(&Dispatcher->Taxibots[i], aux);
 			Dispatcher->OrdersLength--;
 		}
 	}
-
-	UpdateTaxibots(Dispatcher->Taxibots, Dispatcher->TaxibotsLength, AStarGrid);
 }
 
-void FilterCommands(Tqueue *Queue) 
+void AssignOrderToTaxibot(taxibot *Taxibot, order Order)
 {
-	node *temp = NULL;
-	node *prev = NULL;
-	node *aux = NULL;
-
-	while (((order*)(Queue->head->Data))->Status == ARRIVED) {
-		aux = Queue->head;
-		Queue->head = aux->next;
-		free(aux->Data);
-		free(aux);
-	} 
-
-	temp = Queue->head->next;
-	prev = temp;
-	while (temp != NULL) {
-		if (((order*)((node*)(temp->Data)))->Status == ARRIVED) {
-			aux = temp;
-			prev->next = aux->next;
-			free(aux->Data);
-			free(aux);
-		} else {
-			temp = temp->next;
-		}
-
-		prev = temp;
-	}
-}
-
-void AssignOrderToTaxibot(taxibot *Taxibot, order *Order)
-{	
 	Taxibot->Order = Order;
-	Taxibot->Status = WORKING;
+	Taxibot->Order.Status = WAITING;
+	Taxibot->Status = TAXIBOT_RECEIVED_ORDER;
 }
 
 void UpdateTaxibots(taxibot *Taxibots, int TaxibotsLength, astar_grid *AStarGrid) 
@@ -479,40 +420,57 @@ void UpdateTaxibots(taxibot *Taxibots, int TaxibotsLength, astar_grid *AStarGrid
 
 void UpdateTaxibot(taxibot *Taxibot, astar_grid *AStarGrid)
 {	
-	point Start = {0};
-	point End = {0};
-	if (Taxibot->Status == WORKING && IsStackEmpty(Taxibot->Path)) {
-		Start  = CreatePoint(Taxibot->Position);
-		End = FindParkingSpot(AStarGrid, Taxibot->Order->Position);
-		Taxibot->Status = TO_ORDER_LOCATION;
-		printf("->To passenger: Taxi(%d %d) Dest(%d %d)\n\n", Start.Row, Start.Col, End.Row, End.Col);
-		Taxibot->Path = FindPath(Start, End, AStarGrid);
-	}
+	if (!Taxibot) return;
 
-	if (Taxibot->Status == TO_ORDER_LOCATION && IsStackEmpty(Taxibot->Path)) {
-		Start = FindParkingSpot(AStarGrid, Taxibot->Order->Position);
-		End = FindParkingSpot(AStarGrid, Taxibot->Order->Destination);
-		printf("->To final dest: Taxi(%d %d)  Dest(%d %d)\n\n", Start.Row, Start.Col, End.Row, End.Col);
-		Taxibot->Status = TO_DESTINATION;
-		Taxibot->Path = FindPath(Start, End, AStarGrid);
-	}
+	switch (Taxibot->Status) {
+		case TAXIBOT_AVAILABLE:
+			break;
 
-	if (!IsStackEmpty(Taxibot->Path)) {
-		Tstack *Cell = PopStack(&Taxibot->Path);
-		Taxibot->Position.X = Cell->Data.Location.Row;
-		Taxibot->Position.Y = Cell->Data.Location.Col;
-		free(Cell);
-	} else {
-		if (Taxibot->Status == TO_DESTINATION) {
-			Taxibot->Status = AVAILABLE;
-			Taxibot->Order->Status = ARRIVED;
-			Taxibot->Order = NULL;
-		}
-	}
+		case TAXIBOT_RECEIVED_ORDER:
+			Taxibot->Path = FindPath(CreatePoint(Taxibot->Position), FindParkingSpot(Taxibot->Order.Position, AStarGrid), AStarGrid);
+			if (Taxibot->Path != NULL) {
+				Taxibot->Status = TAXIBOT_TO_ORDER;
+			} else {
+				Taxibot->Status = TAXIBOT_AVAILABLE;
+			}
+			break;
 
+		case TAXIBOT_TO_ORDER:
+			TaxibotFollowPath(Taxibot, Taxibot->Path);
+			if (!Taxibot->Path || IsStackEmpty(Taxibot->Path)) {
+				Taxibot->Path = FindPath(CreatePoint(Taxibot->Position), FindParkingSpot(Taxibot->Order.Destination, AStarGrid), AStarGrid);		
+				if (Taxibot->Path != NULL) {
+					Taxibot->Status = TAXIBOT_TO_DEST;
+					Taxibot->Order.Status = IN_TRANSIT;
+				} else {
+					Taxibot->Status = TAXIBOT_AVAILABLE;
+				}
+			}
+			break;
+
+		case TAXIBOT_TO_DEST:
+			TaxibotFollowPath(Taxibot, Taxibot->Path);
+			if (!Taxibot->Path || IsStackEmpty(Taxibot->Path)) {
+				Taxibot->Status = TAXIBOT_AVAILABLE;
+				Taxibot->Order.Status = ARRIVED;
+			}
+			break;	
+	}
 }
 
-point FindParkingSpot(astar_grid *AStarGrid, v2 Location) {
+void TaxibotFollowPath(taxibot *Taxibot, Tstack *Path)
+{
+	if (!Path || IsStackEmpty(Taxibot->Path)) {
+		return;
+	}
+
+	Tstack *Cell = PopStack(&Taxibot->Path);
+	Taxibot->Position.X = Cell->Data.Location.Row;
+	Taxibot->Position.Y = Cell->Data.Location.Col;
+	free(Cell);
+}
+
+point FindParkingSpot(v2 Location, astar_grid *AStarGrid) {
 	point Point = {.Row = (int)(Location.X), .Col = (int)(Location.Y)};
 
 	for (int add_Row = -1; add_Row <= 1; add_Row++) {
@@ -556,16 +514,15 @@ int MoveTowardsPoint(v2 Position, taxibot Taxibot)
 
 void AddTaxibot(taxibot *Taxibot, int *TaxibotsLength, depot *Depots)
 {	
-	if ((*TaxibotsLength) < MAX_NUMBER_OF_TAXIBOTS) {
-		int i = rand() % MAX_NUMBER_OF_DEPOTS;
-		Taxibot->Position.X = Depots[i].Position.X;
-		Taxibot->Position.Y = Depots[i].Position.Y;
-		Taxibot->Status = AVAILABLE;
-		Taxibot->Path = NULL;
-		(*TaxibotsLength)++;
+	if ((*TaxibotsLength) >= MAX_NUMBER_OF_TAXIBOTS)
+		return;
 
-		// printf("Taxi adaugat::%.0f %.0f\n", Taxibot->Position.X, Taxibot->Position.Y);
-	}
+	int i = rand() % MAX_NUMBER_OF_DEPOTS;
+	Taxibot->Position.X = Depots[i].Position.X;
+	Taxibot->Position.Y = Depots[i].Position.Y;
+	Taxibot->Status = TAXIBOT_AVAILABLE;
+	Taxibot->Path = NULL;
+	(*TaxibotsLength)++;
 }
 
 void ShowQueue(Tqueue *Queue)
@@ -647,6 +604,10 @@ void DrawTaxibot(taxibot *Taxibot)
 				   .w = TILE_SIZE_PIXELS, .h = TILE_SIZE_PIXELS};
 
 	DrawRectangle(r, 248, 215, 99);
+
+	if (Taxibot->Status == TAXIBOT_TO_ORDER || Taxibot->Status == TAXIBOT_TO_DEST)
+		DrawOrder(&Taxibot->Order);
+
 }
 
 void DrawOrders(Tqueue *Orders) {
@@ -660,15 +621,28 @@ void DrawOrders(Tqueue *Orders) {
 }
 
 void DrawOrder(order *Order) {
-	if (Order->Status != WAITING) 
-		return;
+	if (!Order)	return;
 
-	SDL_FRect r = {.x = TILE_SIZE_PIXELS * Order->Position.Y + (TILE_SIZE_PIXELS * 0.25), 
-				   .y = TILE_SIZE_PIXELS * Order->Position.X - (TILE_SIZE_PIXELS * 0.25), 
-				   .w = TILE_SIZE_PIXELS / 2, .h = TILE_SIZE_PIXELS / 2};
+	switch (Order->Status) {
+		case WAITING:
+		{
+			SDL_FRect r = {.x = TILE_SIZE_PIXELS * Order->Position.Y + (TILE_SIZE_PIXELS * 0.25), 
+						   .y = TILE_SIZE_PIXELS * Order->Position.X - (TILE_SIZE_PIXELS * 0.25), 
+						   .w = TILE_SIZE_PIXELS / 2, .h = TILE_SIZE_PIXELS / 2};
 
+			DrawRectangle(r, 10, 215, 99);
+		} break;
+			
+		case IN_TRANSIT:
+		{
+			SDL_FRect r = {.x = TILE_SIZE_PIXELS * Order->Destination.Y + (TILE_SIZE_PIXELS * 0.25), 
+						   .y = TILE_SIZE_PIXELS * Order->Destination.X - (TILE_SIZE_PIXELS * 0.25), 
+						   .w = TILE_SIZE_PIXELS / 2, .h = TILE_SIZE_PIXELS / 2};
 
-	DrawRectangle(r, 10, 215, 99);
+			DrawRectangle(r, 239, 98, 68);
+		} break;			
+	}
+
 
 }
 
