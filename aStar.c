@@ -203,6 +203,7 @@ void PrintStack(Tstack *Stack) {
         printf("-> (%d,%d)", Temp->Data.Location.Row, Temp->Data.Location.Col);
         Temp = Temp->next;
     }
+    printf("\n");
 }
 
 void DestroyStack(Tstack **Stack) {

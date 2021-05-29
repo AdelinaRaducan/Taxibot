@@ -104,6 +104,7 @@ typedef struct order {
 typedef struct taxibot_dispatcher;
 
 typedef struct taxibot {
+	int ID;
 	v2 Position;
 	v2 Direction;
 	double Speed;
@@ -111,6 +112,7 @@ typedef struct taxibot {
 	taxibot_status Status;
 	Tstack *Path;
 	struct taxibot_dispatcher *Dispatcher;
+	v2 NextPosition;
 } taxibot;
 
 typedef struct depot {
@@ -283,6 +285,7 @@ taxibot_dispatcher * CreateDispatcher()
 	Dispatcher->Taxibots = (taxibot *) malloc (MAX_NUMBER_OF_TAXIBOTS * sizeof(taxibot));
 	for (int i = 0; i < MAX_NUMBER_OF_TAXIBOTS; ++i) {
 		Dispatcher->Taxibots[i].Speed = TAXIBOT_SPEED;
+		Dispatcher->Taxibots[i].ID = i;
 	}
 
 	Dispatcher->TaxibotsLength = 0;
@@ -434,6 +437,7 @@ void UpdateTaxibot(taxibot *Taxibot, astar_grid *AStarGrid)
 								FindParkingSpot(Taxibot->Order.Position, AStarGrid), AStarGrid
 							);
 			if (Taxibot->Path != NULL) {
+				PrintStack(Taxibot->Path);
 				Taxibot->Status = TAXIBOT_TO_ORDER;
 			} else {
 				Taxibot->Status = TAXIBOT_AVAILABLE;
@@ -468,21 +472,19 @@ void UpdateTaxibot(taxibot *Taxibot, astar_grid *AStarGrid)
 
 void TaxibotFollowPath(taxibot *Taxibot, Tstack *Path)
 {
+
 	if (!Path || IsStackEmpty(Taxibot->Path)) {
 		return;
 	}
 
-	static v2 CurrentPointDestination = {0};
-	if (CurrentPointDestination.X == 0 && CurrentPointDestination.Y == 0) {
-		CurrentPointDestination = Taxibot->Position;
+	if (Taxibot->ID == 1) {
+		int b = 1;
 	}
 
-	v2 Distance = TaxibotMoveTowardsPoint(Taxibot, CreatePoint(CurrentPointDestination));
-	printf("Distance: %f %f\n", Distance.X, Distance.Y);
+	v2 Distance = TaxibotMoveTowardsPoint(Taxibot, CreatePoint(Taxibot->NextPosition));
 	if (Distance.X < TAXIBOT_SPEED && Distance.Y < TAXIBOT_SPEED) {
 		Tstack *stack = PopStack(&Taxibot->Path); // TODooooooooooooooooooooo WTFF??????!!!!!!!!!!!!
-		CurrentPointDestination = (v2) {stack->Data.Location.Row * TILE_SIZE_PIXELS + TILE_SIZE_PIXELS/2, stack->Data.Location.Col * TILE_SIZE_PIXELS + TILE_SIZE_PIXELS/2};
-		
+		Taxibot->NextPosition = (v2) {stack->Data.Location.Row * TILE_SIZE_PIXELS + TILE_SIZE_PIXELS/2, stack->Data.Location.Col * TILE_SIZE_PIXELS + TILE_SIZE_PIXELS/2};
 		free(stack); 
 	}
 }
@@ -524,14 +526,16 @@ v2 GetTaxiBotDirection(taxibot *Taxibot, point Point)
 	else if ((int) (Taxibot->Position.Y - Point.Col) > 0)
 		DirectionY = -1;
 
-	if ((DirectionX == 1 || DirectionX == -1) && (DirectionY == 1 || DirectionY == -1))
-		printf("");
-
 	return (v2) {DirectionX, DirectionY};
 }
 
 v2 TaxibotMoveTowardsPoint(taxibot *Taxibot, point Point) 
 {
+
+	if (Taxibot->ID == 1) {
+		int b = 1;
+	}
+
 	v2 Distance = (v2) { abs(Taxibot->Position.X - Point.Row), 
 		                 abs(Taxibot->Position.Y - Point.Col)};
 
@@ -539,10 +543,7 @@ v2 TaxibotMoveTowardsPoint(taxibot *Taxibot, point Point)
 		return Distance;
 	}
 
-	printf("taxi: %f %f\n", Taxibot->Position.X, Taxibot->Position.Y);
-	printf("point: %d %d\n", Point.Row, Point.Col);
 	Taxibot->Direction = GetTaxiBotDirection(Taxibot, Point);
-	printf("Direct : %f %f\n", Taxibot->Direction.X, Taxibot->Direction.Y);
 	
 	if (Distance.X < TAXIBOT_SPEED)
 		Taxibot->Position.X = Point.Row;
@@ -565,6 +566,7 @@ void AddTaxibot(taxibot *Taxibot, int *TaxibotsLength, depot *Depots)
 	int i = rand() % MAX_NUMBER_OF_DEPOTS;
 	Taxibot->Position.X = TILE_SIZE_PIXELS * Depots[i].Position.X + TILE_SIZE_PIXELS/2;
 	Taxibot->Position.Y = TILE_SIZE_PIXELS * Depots[i].Position.Y + TILE_SIZE_PIXELS/2;
+	Taxibot->NextPosition = Taxibot->Position;
 	Taxibot->Status = TAXIBOT_AVAILABLE;
 	Taxibot->Path = NULL;
 	(*TaxibotsLength)++;
