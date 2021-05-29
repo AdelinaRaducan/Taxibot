@@ -58,4 +58,6 @@ void				PushQueue(Tqueue *Queue, void *data);
 int 				IsQueueEmpty(Tqueue *Queue);
 void 				DestroyQueue(Tqueue *Queue);
 void 				PrintQueue(Tqueue *Queue);
+void        		IterateQueue(Tqueue *Queue);
+void 				CloneQueue(Tqueue *Queue, Tqueue *Clone);
 

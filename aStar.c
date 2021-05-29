@@ -3,11 +3,12 @@
 cell * GetCell(int X, int Y, astar_grid *Grid) {
     if ((X >= 0) && (X < Grid->NumberRows)
          && (Y >= 0) && (Y < Grid->NumberCols)) {
+        printf("astar grid value: [%d][%d] = %d ", X, Y, Grid->Map[X][Y]);
         return &Grid->Map[X][Y];
     }
     
     return NULL;
-}
+} 
 
 bool EqualPoints(point PointA, point PointB) {
     if (PointA.Row == PointB.Row && PointA.Col == PointB.Col) 
@@ -16,8 +17,9 @@ bool EqualPoints(point PointA, point PointB) {
 }
 
 bool IsNeighbour(point Location, point Neighbour, astar_grid *Grid) {
-    if (GetCell(Neighbour.Row, Neighbour.Col, Grid) == NULL) 
+    if (Neighbour.Row < 0 || Neighbour.Row >= Grid->NumberRows || Neighbour.Col < 0 || Neighbour.Col >= Grid->NumberCols) {
         return false;
+    }
 
     if (Location.Col == Neighbour.Col && (Location.Row == Neighbour.Row + 1 || Location.Row == Neighbour.Row - 1))
         return true;
@@ -31,6 +33,14 @@ double CalculateHeuristic(point Source, point Dest, cell Node) {
     double hNew = (abs(Source.Row - Dest.Row) + abs(Source.Col - Dest.Col));
     double gNew = Node.g + 1.0;
     return (gNew + hNew);
+}
+
+void CloneQueue(Tqueue *Queue, Tqueue *Clone) {
+    node *temp = Queue->head;
+    while(temp != NULL) {
+        PushQueue(Clone, temp->Data);
+        temp = temp->next;
+    }
 }
 
 void InitQueue(Tqueue *Queue, size_t memSize, compare_function Function)
@@ -77,8 +87,12 @@ void PushQueue(Tqueue *Queue, void* data) {
         Queue->head  = newNode;
     } else {
         if (Queue->CompareFunction == NULL) {
-            newNode->next = Queue->head;
-            Queue->head = newNode;
+            while (temp->next != NULL) {
+                temp = temp->next;
+            }
+            
+            newNode->next = temp->next;
+            temp->next = newNode;
             return;
         }
 
@@ -240,17 +254,7 @@ bool ElementIsInOpenList(Tqueue *Queue, cell Node) {
 }
 
 Tstack * FindPath(point Start, point End, astar_grid *Grid) {
-    if (GetCell(Start.Row, Start.Col, Grid) == NULL) {
-        printf("Invalid source\n");
-        return NULL;
-    }
-
-    if (GetCell(End.Row, End.Col, Grid) == NULL) {
-        printf("Invalid Destination\n");
-        return NULL;
-    }
-
-    if (!Grid->IsOpenCellFunction(Start, (void*)(Grid)) || !Grid->IsOpenCellFunction(End, (void*)(Grid))) {
+    if (Grid->IsOpenCellFunction(Start, Grid) == false || Grid->IsOpenCellFunction(End, Grid) == false) {
         printf("Source or Destination is blocked\n");
         return NULL;
     }
@@ -319,7 +323,7 @@ Tstack * FindPath(point Start, point End, astar_grid *Grid) {
                         Tstack *FinalPath  = TracePath(End, Grid);
                         DestroyQueue(&OpenList);
                         return FinalPath;
-                    } else if (!ClosedList[Neighbour.Row][Neighbour.Col] && Grid->IsOpenCellFunction(Neighbour, (void*)(Grid))) {
+                    } else if (!ClosedList[Neighbour.Row][Neighbour.Col] && (Grid->IsOpenCellFunction(Neighbour, Grid) == true)) {
                         double fNew = CalculateHeuristic(Neighbour, End, Grid->Map[RefCoord.Row][RefCoord.Col]);
 
                         if (Grid->Map[Neighbour.Row][Neighbour.Col].f > fNew || 

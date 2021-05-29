@@ -36,9 +36,9 @@ const int SCREEN_WIDTH_PIXELS = 1280;
 const int SCREEN_HEIGHT_PIXELS = 720;
 const int TILE_SIZE_PIXELS = 16; 
 
-const int MAX_NUMBER_OF_TAXIBOTS = 500;
-const int MAX_NUMBER_OF_ORDERS = 1920;
-const int MAX_NUMBER_OF_DEPOTS = 10;
+const int MAX_NUMBER_OF_TAXIBOTS = 1;
+const int MAX_NUMBER_OF_ORDERS = 20;
+const int MAX_NUMBER_OF_DEPOTS = 2;
 
 static struct {
 	SDL_Window *Handler;
@@ -46,21 +46,29 @@ static struct {
 	struct nk_context *Nuklear;
 } WindowManager;
 
-enum tile_type {
+typedef enum tile_type {
 	ROAD_TILE,
 	TOWER_TILE
-};
+} tile_type;
 
-enum passenger_status {
+typedef enum passenger_status {
 	WAITING,
 	IN_TRANSIT,
 	ARRIVED
-};
+} passenger_status;
 
 typedef enum command_type {
 	ADD_TAXIBOT,
 	ADD_ORDER
 } command_type;
+
+typedef enum taxibot_status {
+	AVAILABLE,
+	WORKING,
+	CHARGING,
+	TO_ORDER_LOCATION,
+	TO_DESTINATION
+} taxibot_status;
 
 typedef struct v2 {
 	union {
@@ -75,7 +83,7 @@ typedef struct v2 {
 } v2;
 
 typedef struct tile {
-	enum tile_type Type;
+	tile_type Type;
 } tile;
 
 typedef struct tilemap {
@@ -87,14 +95,16 @@ typedef struct order {
 	struct timeval tv;
 	v2 Position;
 	v2 Destination;
-	enum passenger_status Status;
+	passenger_status Status;
 } order;
 
 typedef struct taxibot {
 	v2 Position;
 	double Speed;
 	int DirectionX, DirectionY;
-	order Order;
+	order *Order;
+	taxibot_status Status;
+	Tstack *Path;
 } taxibot;
 
 typedef struct depot {
@@ -106,6 +116,7 @@ typedef struct taxibot_dispatcher {
 	taxibot *Taxibots;
 	depot *Depots;
 	int TaxibotsLength;
+	int OrdersLength;
 	int DepotsLength;
 } taxibot_dispatcher;
 
@@ -122,36 +133,45 @@ void CreateWindow(int Width, int Height);
 game_state * CreateGameState();
 astar_grid * CreateAStarGrid();
 taxibot_dispatcher * CreateDispatcher();
-void CreateOrder(Tqueue *Orders, astar_grid *AStarGrid);
+void CreateOrder(Tqueue *Orders, int *OrdersLength, astar_grid *AStarGrid);
+void CreateDepots(depot *Depots);
 
-void UpdateDispatcher(taxibot_dispatcher *Dispatcher);
+void UpdateAndRenderPlay(game_state *GameState);
+
+void Update(game_state *GameState);
+void UpdateDispatcher(taxibot_dispatcher *Dispatcher, astar_grid *AStarGrid);
 void UpdateOrder(order *Order);
-void UpdateTaxibot(taxibot *Taxibot);
+void UpdateTaxibot(taxibot *Taxibot, astar_grid *AStarGrid);
+void UpdateTaxibots(taxibot *Taxibots, int TaxibotsLength, astar_grid *AStarGrid);
 
+void Draw(game_state *GameState);
+void StartDrawing();
+void DrawGUI(game_state *GameState);
+void EndDrawing();
+void DrawTilemap(tilemap *Tilemap);
+void DrawDepots(depot *Depots);
 void DrawOrder(order *Order);
 void DrawOrders(Tqueue *Orders);
 void DrawTaxibot(taxibot *Taxibot);
 void DrawTaxibots(taxibot *Taxibots, int TaxibotsLength);
 
-void AddTaxibot(taxibot *Taxibot, int *TaxibotsLength);
+void AddTaxibot(taxibot *Taxibot, int *TaxibotsLength, depot *Depots);
+void AssignOrderToTaxibot(taxibot *Taxibot, order *Order);
 bool IsOpenCellFunction(point Location, void *AStarGrid);
 int  CompareOrders(const void *OrderA, const void *OrderB);
+int  MoveTowardsPoint(v2 Position, taxibot Taxibot);
+point CreatePoint(v2 Position);
+point FindParkingSpot(astar_grid *AStarGrid, v2 Point);
+void FilterCommands(Tqueue *Queue);
 
 void DestroyDispatcher(taxibot_dispatcher *Dispatcher);
 void DestroyAStarGrid(astar_grid * AStarGrid);
 void DestroyGameState(game_state *GameState);
 void DestroyWindow();
 
-void UpdateAndRenderPlay(game_state *GameState);
+
 void HandleInput(game_state *GameState);
-void Update(game_state *GameState);
-void Draw(game_state *GameState);
-void DrawGUI(game_state *GameState);
-void StartDrawing();
-void EndDrawing();
-void DrawTilemap(tilemap *Tilemap);
 int  GetTaxiDirection(int Value1, int Value2);
-int  MoveTowardsPoint(point Point, taxibot Taxibot);
 
 int main( int argc, char* args[] ) 
 {
@@ -219,14 +239,14 @@ game_state * CreateGameState()
 
 astar_grid * CreateAStarGrid() 
 {
-	astar_grid  *AStarGrid = malloc(sizeof(astar_grid));
+	astar_grid  *AStarGrid = (astar_grid*) malloc(sizeof(astar_grid));
 	AStarGrid->NumberRows = SCREEN_HEIGHT_PIXELS / TILE_SIZE_PIXELS;
 	AStarGrid->NumberCols = SCREEN_WIDTH_PIXELS / TILE_SIZE_PIXELS;
 	AStarGrid->IsOpenCellFunction = IsOpenCellFunction;
-	AStarGrid->Map = malloc(AStarGrid->NumberRows * sizeof(cell*));
+	AStarGrid->Map = (cell**) malloc(AStarGrid->NumberRows * sizeof(cell*));
 
 	for (int i = 0; i < AStarGrid->NumberRows; i++) {
-		AStarGrid->Map[i] = calloc(AStarGrid->NumberCols, sizeof(cell));
+		AStarGrid->Map[i] = (cell*) calloc(AStarGrid->NumberCols, sizeof(cell));
 	}
 
 	int k = 0;
@@ -238,6 +258,8 @@ astar_grid * CreateAStarGrid()
 				AStarGrid->Map[i][j].MovementCost = 1;
 			}
 			
+			AStarGrid->Map[i][j].Location.Row = 0;
+			AStarGrid->Map[i][j].Location.Col = 0;
 			AStarGrid->Map[i][j].f = -1;
 			AStarGrid->Map[i][j].g = 0.0;
             AStarGrid->Map[i][j].h = 0.0;
@@ -251,11 +273,26 @@ taxibot_dispatcher * CreateDispatcher()
 {
 	taxibot_dispatcher *Dispatcher = (taxibot_dispatcher *) malloc(sizeof(taxibot_dispatcher));
 	Dispatcher->Taxibots = (taxibot *) malloc (MAX_NUMBER_OF_TAXIBOTS * sizeof(taxibot));
+	for (int i = 0; i < MAX_NUMBER_OF_TAXIBOTS; i++) {
+		Dispatcher->Taxibots[i].Order = NULL;
+	}
+
 	Dispatcher->TaxibotsLength = 0;
 	Dispatcher->Depots = (depot *) malloc(MAX_NUMBER_OF_DEPOTS * sizeof(depot));
 	Dispatcher->DepotsLength = 0;
+	CreateDepots(Dispatcher->Depots);
 	InitQueue(&Dispatcher->Orders, sizeof(order), NULL);
+	Dispatcher->OrdersLength = 0;
 	return Dispatcher;
+}
+
+void CreateDepots(depot *Depots) 
+{
+	Depots[0].Position.X = 0;
+	Depots[0].Position.Y = 0;
+
+	Depots[1].Position.X = 44;
+	Depots[1].Position.Y = 79;
 }
 
 // TODO 0.0: Make use of the brain!!!! We code small and test frequently!!!!
@@ -305,40 +342,22 @@ void HandleInput(game_state *GameState)
       		DestroyWindow();
 			exit(0);
     	}
+
+    	if (event.type == SDL_KEYDOWN) {
+    		switch (event.key.keysym.sym) {
+    			case SDLK_RETURN:
+	    			PushQueue(&GameState->Commands, &(command_type){ADD_TAXIBOT});
+			    	printf("<RETURN> is pressed.\n");
+			    	break;
+
+			    case SDLK_o:
+		    		PushQueue(&GameState->Commands, &(command_type){ADD_ORDER});
+				    printf("<O> is pressed.\n");
+				    break;
+    		}
+    	}
+    	
     	nk_sdl_handle_event(&event);
-	}
-
-	//TODO (low prority) when pressing a keyboard add only a single command
-    const Uint8 *State = SDL_GetKeyboardState(NULL);
-    if (GameState->PreviousKeyboardState != NULL) {
-    	printf("state: %d prev: %d\n", State[SDL_SCANCODE_RETURN], GameState->PreviousKeyboardState[SDL_SCANCODE_RETURN]);
-		if (State[SDL_SCANCODE_RETURN] && State[SDL_SCANCODE_RETURN] != GameState->PreviousKeyboardState[SDL_SCANCODE_RETURN]) {
-			PushQueue(&GameState->Commands, &(command_type){ADD_TAXIBOT});
-		    printf("<RETURN> is pressed.\n");
-		} 
-		if (State[SDL_SCANCODE_O] && State[SDL_SCANCODE_RETURN] != GameState->PreviousKeyboardState[SDL_SCANCODE_RETURN]) {
-			PushQueue(&GameState->Commands, &(command_type){ADD_ORDER});
-		    printf("<O> is pressed.\n");
-		}
-	} else {
-		if (State[SDL_SCANCODE_RETURN]) {
-			printf("NULL\n");
-			PushQueue(&GameState->Commands, &(command_type){ADD_TAXIBOT});
-		    printf("<RETURN> is pressed.\n");
-		}
-
-		if (State[SDL_SCANCODE_O]) {
-			PushQueue(&GameState->Commands, &(command_type){ADD_ORDER});
-		    printf("<O> is pressed.\n");
-		}
-	}
-
-	if (GameState->PreviousKeyboardState == NULL) {
-		GameState->PreviousKeyboardState = malloc(sizeof(Uint8) * sizeof(State) / sizeof(Uint8));
-	}
-	
-	for (int i = 0; i < sizeof(Uint8) * sizeof(State); i++) {
-		GameState->PreviousKeyboardState[i] = State[i];
 	}
 
 	nk_input_end(WindowManager.Nuklear);
@@ -352,27 +371,22 @@ void Update(game_state *GameState)
 
 		switch(Command) {
 			case ADD_TAXIBOT:
-				AddTaxibot(&GameState->Dispatcher->Taxibots[GameState->Dispatcher->TaxibotsLength], &GameState->Dispatcher->TaxibotsLength);
+				AddTaxibot(&GameState->Dispatcher->Taxibots[GameState->Dispatcher->TaxibotsLength], &GameState->Dispatcher->TaxibotsLength,
+							GameState->Dispatcher->Depots);
 				break;
 
 			case ADD_ORDER:
-				CreateOrder(&GameState->Dispatcher->Orders, GameState->AStarGrid);
+				CreateOrder(&GameState->Dispatcher->Orders, &GameState->Dispatcher->OrdersLength, GameState->AStarGrid);
+				break;
+
+			default:
 				break;
 		}
 
 		PopQueue(&GameState->Commands);
 	}
-	// UpdateDispatcher(GameState->Dispatcher);
-	// todo APELEZI ALTE FUNCTII... SA NU VAD MAI MULT DE 20 DE LINII.....
 
-	// Dispatcher -> taxi, comenzi, pasageri
-	
-	// UpdateOrders
-	// adaug o noua comanda? da sau nu
-	// cui taxibot o asignez?
-	// iterez lista de comenzi si ii updatez statusul IN TRANSIT etc etc
-
-	// updatez pozitia taxiului, bateria, etc etc et
+	UpdateDispatcher(GameState->Dispatcher, GameState->AStarGrid);
 }
 
 void Draw(game_state *GameState)
@@ -380,6 +394,7 @@ void Draw(game_state *GameState)
 	StartDrawing();
 	{	
 		DrawTilemap(&GameState->Tilemap);
+		DrawDepots(GameState->Dispatcher->Depots);
 		DrawTaxibots(GameState->Dispatcher->Taxibots, GameState->Dispatcher->TaxibotsLength);
 		DrawOrders(&GameState->Dispatcher->Orders);
 		// DrawGUI(GameState);
@@ -387,24 +402,235 @@ void Draw(game_state *GameState)
 	EndDrawing();
 }
 
-void UpdateDispatcher(taxibot_dispatcher *Dispatcher) 
-{
-	AddTaxibot(&Dispatcher->Taxibots[Dispatcher->TaxibotsLength], &Dispatcher->TaxibotsLength);
+void UpdateDispatcher(taxibot_dispatcher *Dispatcher, astar_grid *AStarGrid) 
+{	
+	if (!IsQueueEmpty(&Dispatcher->Orders)) {
+		FilterCommands(&Dispatcher->Orders);
+	} 
+
+	if (IsQueueEmpty(&Dispatcher->Orders)) {
+		return;
+	}
+
+
+	Tqueue CloneOrders;
+	InitQueue(&CloneOrders, sizeof(order), NULL);
+	CloneQueue(&Dispatcher->Orders, &CloneOrders);
+
+	for (int i = 0; i < Dispatcher->TaxibotsLength; i++) {
+		if (IsQueueEmpty(&Dispatcher->Orders)) {
+			break;
+		}
+
+		if (Dispatcher->Taxibots[i].Status == AVAILABLE) {
+			order Order = {0};
+			PeekQueue(&CloneOrders, &Order);
+			PopQueue(&CloneOrders);
+			PopQueue(&Dispatcher->Orders);
+			AssignOrderToTaxibot(&Dispatcher->Taxibots[i], &Order);
+			Dispatcher->OrdersLength--;
+		}
+	}
+
+	UpdateTaxibots(Dispatcher->Taxibots, Dispatcher->TaxibotsLength, AStarGrid);
 }
 
-void UpdateTaxibot(taxibot *Taxibot) 
+void FilterCommands(Tqueue *Queue) 
 {
+	node *temp = NULL;
+	node *prev = NULL;
+	node *aux = NULL;
+
+	while (((order*)(Queue->head->Data))->Status == ARRIVED) {
+		aux = Queue->head;
+		Queue->head = aux->next;
+		free(aux->Data);
+		free(aux);
+	} 
+
+	temp = Queue->head->next;
+	prev = temp;
+	while (temp != NULL) {
+		if (((order*)((node*)(temp->Data)))->Status == ARRIVED) {
+			aux = temp;
+			prev->next = aux->next;
+			free(aux->Data);
+			free(aux);
+		} else {
+			temp = temp->next;
+		}
+
+		prev = temp;
+	}
 }
 
-void AddTaxibot(taxibot *Taxibot, int *TaxibotsLength)
+void AssignOrderToTaxibot(taxibot *Taxibot, order *Order)
+{	
+	Taxibot->Order = Order;
+	Taxibot->Status = WORKING;
+}
+
+void UpdateTaxibots(taxibot *Taxibots, int TaxibotsLength, astar_grid *AStarGrid) 
+{
+	for (int i = 0; i < TaxibotsLength; i++) {
+		UpdateTaxibot(&Taxibots[i], AStarGrid);
+	}
+}
+
+void UpdateTaxibot(taxibot *Taxibot, astar_grid *AStarGrid)
+{	
+	point Start = {0};
+	point End = {0};
+	if (Taxibot->Status == WORKING && IsStackEmpty(Taxibot->Path)) {
+		Start  = CreatePoint(Taxibot->Position);
+		End = FindParkingSpot(AStarGrid, Taxibot->Order->Position);
+		Taxibot->Status = TO_ORDER_LOCATION;
+		printf("->To passenger: Taxi(%d %d) Dest(%d %d)\n\n", Start.Row, Start.Col, End.Row, End.Col);
+		Taxibot->Path = FindPath(Start, End, AStarGrid);
+	}
+
+	if (Taxibot->Status == TO_ORDER_LOCATION && IsStackEmpty(Taxibot->Path)) {
+		Start = FindParkingSpot(AStarGrid, Taxibot->Order->Position);
+		End = FindParkingSpot(AStarGrid, Taxibot->Order->Destination);
+		printf("->To final dest: Taxi(%d %d)  Dest(%d %d)\n\n", Start.Row, Start.Col, End.Row, End.Col);
+		Taxibot->Status = TO_DESTINATION;
+		Taxibot->Path = FindPath(Start, End, AStarGrid);
+	}
+
+	if (!IsStackEmpty(Taxibot->Path)) {
+		Tstack *Cell = PopStack(&Taxibot->Path);
+		Taxibot->Position.X = Cell->Data.Location.Row;
+		Taxibot->Position.Y = Cell->Data.Location.Col;
+		free(Cell);
+	} else {
+		if (Taxibot->Status == TO_DESTINATION) {
+			Taxibot->Status = AVAILABLE;
+			Taxibot->Order->Status = ARRIVED;
+			Taxibot->Order = NULL;
+		}
+	}
+
+}
+
+point FindParkingSpot(astar_grid *AStarGrid, v2 Location) {
+	point Point = {.Row = (int)(Location.X), .Col = (int)(Location.Y)};
+
+	for (int add_Row = -1; add_Row <= 1; add_Row++) {
+    	for (int add_Col = -1; add_Col <= 1; add_Col++) {
+    		point ParkingSpot = {.Row = Point.Row + add_Row, .Col = Point.Col + add_Col};
+    		if (IsNeighbour(Point, ParkingSpot, AStarGrid) == true && AStarGrid->Map[ParkingSpot.Row][ParkingSpot.Col].MovementCost == 1) {
+    			return ParkingSpot;
+    		}
+    	}
+    }
+}
+
+point CreatePoint(v2 Position)
+{	
+	point Point = {0};
+	Point.Row = (int) (Position.X);
+	Point.Col = (int) (Position.Y);
+
+	return Point;
+}
+
+int GetTaxiDirection(int Value1, int Value2) 
+{
+	if (Value1 * TILE_SIZE_PIXELS - Value2 > 0) {
+		return 1;
+	} else if (Value1 * TILE_SIZE_PIXELS - Value2 < 0) {
+		return -1;
+	} 
+
+	return 0;
+}
+
+int MoveTowardsPoint(v2 Position, taxibot Taxibot) 
+{	
+	if (Position.X * TILE_SIZE_PIXELS == Taxibot.Position.X && Position.Y * TILE_SIZE_PIXELS == Taxibot.Position.Y) {
+		return 1;
+	}
+
+	return 0;
+}
+
+void AddTaxibot(taxibot *Taxibot, int *TaxibotsLength, depot *Depots)
 {	
 	if ((*TaxibotsLength) < MAX_NUMBER_OF_TAXIBOTS) {
-		Taxibot->Position.X = rand() % (SCREEN_HEIGHT_PIXELS / TILE_SIZE_PIXELS);
-		Taxibot->Position.Y = rand() % (SCREEN_WIDTH_PIXELS / TILE_SIZE_PIXELS);
+		int i = rand() % MAX_NUMBER_OF_DEPOTS;
+		Taxibot->Position.X = Depots[i].Position.X;
+		Taxibot->Position.Y = Depots[i].Position.Y;
+		Taxibot->Status = AVAILABLE;
+		Taxibot->Path = NULL;
 		(*TaxibotsLength)++;
 
-		printf("Taxi adaugat::%.0f %.0f\n", Taxibot->Position.X, Taxibot->Position.Y);
+		// printf("Taxi adaugat::%.0f %.0f\n", Taxibot->Position.X, Taxibot->Position.Y);
 	}
+}
+
+void ShowQueue(Tqueue *Queue)
+{
+	node *Temp = Queue->head;
+    
+    while (Temp != NULL) {
+        printf("(O:%.0f %.0f)->", ((order*)((Temp)->Data))->Position.X, ((order*)((Temp)->Data))->Position.Y);
+        Temp = Temp->next;
+    }
+
+    printf("\n");
+}
+
+void CreateOrder(Tqueue *Orders, int *OrdersLength, astar_grid *AStarGrid) 
+{	
+	if ((*OrdersLength) < MAX_NUMBER_OF_ORDERS) {
+		order Order = {0};
+		int counter = 0;
+
+		do {
+			Order.Position.X = rand() % (SCREEN_HEIGHT_PIXELS / TILE_SIZE_PIXELS);
+			Order.Position.Y = rand() % (SCREEN_WIDTH_PIXELS / TILE_SIZE_PIXELS);
+			counter++;
+		} while (AStarGrid->Map[(int)(Order.Position.X)][(int)(Order.Position.Y)].MovementCost != 0 && counter < 10);
+
+		counter = 0;
+		do {
+			Order.Destination.X = rand() % (SCREEN_HEIGHT_PIXELS / TILE_SIZE_PIXELS);
+			Order.Destination.Y = rand() % (SCREEN_WIDTH_PIXELS / TILE_SIZE_PIXELS);
+			counter++;
+		} while (AStarGrid->Map[(int)(Order.Destination.X)][(int)(Order.Destination.Y)].MovementCost != 0 && counter < 10);
+
+		gettimeofday(&(Order.tv),NULL);
+		Order.Status = WAITING;
+
+		if (AStarGrid->Map[(int)(Order.Position.X)][(int)(Order.Position.Y)].MovementCost == 0 &&
+			AStarGrid->Map[(int)(Order.Destination.X)][(int)(Order.Destination.Y)].MovementCost == 0) { 
+			printf("---Order: (%.0f %.0f) (%.0f %.0f)\n", Order.Position.X, Order.Position.Y, Order.Destination.X, Order.Destination.Y);
+			PushQueue(Orders, &Order);
+			(*OrdersLength)++;
+			// ShowQueue(Orders);
+		} else {
+			printf("Invalid order\n");
+		}
+	}
+}
+
+int CompareOrders(const void *OrderA, const void *OrderB)
+{
+	// CAST LA ORDER SI DIFERENTA PE TIMESTAMPS
+}
+
+bool IsOpenCellFunction(point Location, void *AStarGrid) 
+{
+	if (((cell)((astar_grid*)(AStarGrid))->Map[Location.Row][Location.Col]).MovementCost == 1) {
+		return true;
+	} else {
+		return false;
+	}	
+}
+
+int my_random_function() 
+{ 
+    return (rand() % 2);
 }
 
 void DrawTaxibots(taxibot *Taxibots, int TaxibotsLength) 
@@ -434,77 +660,34 @@ void DrawOrders(Tqueue *Orders) {
 }
 
 void DrawOrder(order *Order) {
-	SDL_FRect r = {.x = TILE_SIZE_PIXELS * Order->Position.Y, 
-				   .y = TILE_SIZE_PIXELS * Order->Position.X, 
-				   .w = TILE_SIZE_PIXELS, .h = TILE_SIZE_PIXELS};
+	if (Order->Status != WAITING) 
+		return;
+
+	SDL_FRect r = {.x = TILE_SIZE_PIXELS * Order->Position.Y + (TILE_SIZE_PIXELS * 0.25), 
+				   .y = TILE_SIZE_PIXELS * Order->Position.X - (TILE_SIZE_PIXELS * 0.25), 
+				   .w = TILE_SIZE_PIXELS / 2, .h = TILE_SIZE_PIXELS / 2};
+
 
 	DrawRectangle(r, 10, 215, 99);
 
-	// r.x = TILE_SIZE_PIXELS * Order->Destination.Y;
-	// r.y = TILE_SIZE_PIXELS * Order->Destination.X;
-	// DrawRectangle(r, 10, 215, 99);
 }
 
-void ShowQueue(Tqueue *Queue) {
-	 node *Temp = Queue->head;
-    while (Temp != NULL) {
-        printf("(O:%.0f %.0f)->", ((order*)((Temp)->Data))->Position.X, ((order*)((Temp)->Data))->Position.Y);
-        Temp = Temp->next;
-    }
-}
+void DrawDepots(depot *Depots)
+{
+	for (int i = 0; i < MAX_NUMBER_OF_DEPOTS; i++) {
+		SDL_FRect r = {.x = TILE_SIZE_PIXELS * Depots[i].Position.Y, 
+					   .y = TILE_SIZE_PIXELS * Depots[i].Position.X, 
+					   .w = TILE_SIZE_PIXELS, .h = TILE_SIZE_PIXELS};
 
-void CreateOrder(Tqueue *Orders, astar_grid *AStarGrid) {
-	order Order = {};
-	bool found = false;
-	int counter = 0;
-	do {
-		Order.Position.X = rand() % (SCREEN_HEIGHT_PIXELS / TILE_SIZE_PIXELS);
-		Order.Position.Y = rand() % (SCREEN_WIDTH_PIXELS / TILE_SIZE_PIXELS);
-		counter++;
-	} while (counter < 30);
-
-	counter = 0;
-	do {
-		Order.Destination.X = rand() % (SCREEN_HEIGHT_PIXELS / TILE_SIZE_PIXELS);
-		Order.Destination.Y = rand() % (SCREEN_WIDTH_PIXELS / TILE_SIZE_PIXELS);
-		counter++;
-	} while (counter < 30);
-
-	gettimeofday(&(Order.tv),NULL);
-	Order.Status = WAITING;
-
-	printf("Order: %.0f %.0f\n", Order.Position.X, Order.Position.Y);
-
-	if (AStarGrid->Map[(int)(Order.Position.X)][(int)(Order.Position.Y)].MovementCost == 0 &&
-		AStarGrid->Map[(int)(Order.Destination.X)][(int)(Order.Destination.Y)].MovementCost == 0) { 
-		found = true;
-	}
-
-	if (found == true) {
-		PushQueue(Orders, &Order);
-		ShowQueue(Orders);
-	} else {
-		printf("Invalid order\n");
+		DrawRectangle(r, 255, 0, 145);
 	}
 }
 
-int CompareOrders(const void *OrderA, const void *OrderB)
-{
-	// CAST LA ORDER SI DIFERENTA PE TIMESTAMPS
-}
-
-bool IsOpenCellFunction(point Location, void *AStarGrid) 
-{
-	if ((((astar_grid*)(AStarGrid))->Map[Location.Row][Location.Col].MovementCost) == 1) {
-		return true;
-	} else {
-		return false;
-	}	
-}
-
-int my_random_function() 
-{ 
-    return (rand() % 2);
+void DrawRectangle(SDL_FRect r, int R, int G, int B)
+{	
+    r.y = SCREEN_HEIGHT_PIXELS - r.y - TILE_SIZE_PIXELS;
+    SDL_SetRenderDrawColor( WindowManager.Renderer, R, G, B, 255);
+    SDL_RenderFillRectF( WindowManager.Renderer, &r );
 }
 
 // Tstack *Path = NULL;
@@ -666,46 +849,7 @@ int my_random_function()
 // 	}
 // }
 
-// int GetTaxiDirection(int Value1, int Value2) {
-// 	if (Value1 * TILE_SIZE_PIXELS - Value2 > 0) {
-// 		return 1;
-// 	} else if (Value1 * TILE_SIZE_PIXELS - Value2 < 0) {
-// 		return -1;
-// 	} 
 
-// 	return 0;
-// }
-
-// int MoveTowardsPoint(point Point, taxibot Taxibot) 
-// {	
-// 	if (Point.Row * TILE_SIZE_PIXELS == Taxibot.X && Point.Col * TILE_SIZE_PIXELS == Taxibot.Y) {
-// 		return 1;
-// 	}
-
-// 	return 0;
-// }
-
-// void DrawPassenger() {
-// 	SDL_FRect r = {.x = TILE_SIZE_PIXELS * Passenger.Command.Start.Col, 
-// 				   .y = TILE_SIZE_PIXELS * Passenger.Command.Start.Row, 
-// 				   .w = TILE_SIZE_PIXELS, .h = TILE_SIZE_PIXELS};
-
-// 	DrawRectangle(r, 253, 110, 17);
-
-// 	r.x = TILE_SIZE_PIXELS * Passenger.Command.Destination.Col;
-// 	r.y = TILE_SIZE_PIXELS * Passenger.Command.Destination.Row;
-
-// 	DrawRectangle(r, 226, 68, 17);
-
-// }
-
-
-void DrawRectangle(SDL_FRect r, int R, int G, int B)
-{	
-    r.y = SCREEN_HEIGHT_PIXELS - r.y - TILE_SIZE_PIXELS;
-    SDL_SetRenderDrawColor( WindowManager.Renderer, R, G, B, 255 );
-    SDL_RenderFillRectF( WindowManager.Renderer, &r );
-}
 
 void DrawGUI(game_state *GameState)
 {
@@ -776,6 +920,8 @@ void DestroyGameState(game_state *GameState)
 	free(GameState->Tilemap.Tiles);
 	DestroyAStarGrid(GameState->AStarGrid);
 	DestroyDispatcher(GameState->Dispatcher);
+	DestroyQueue(&GameState->Commands);
+	free(GameState->PreviousKeyboardState);
 	free(GameState);
 }
 

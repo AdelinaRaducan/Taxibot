@@ -24,6 +24,9 @@ build:
 build_gdb:
 	$(CC) -g $(OBJS) $(COMPILER_FLAGS) $(CFLAGS) -o $(EXEC)
 
+build_valgrind:
+	$(CC) -ggdb3 $(OBJS) $(COMPILER_FLAGS) $(CFLAGS) -o $(EXEC)
+
 clean:
 	rm -f $(EXEC)
 
