@@ -133,10 +133,6 @@ void PopQueue(Tqueue *Queue) {
     }
 }
 
-void IterateQueue(Tqueue *Queue) {
-
-}
-
 int IsQueueEmpty(Tqueue *Queue) {
     if (Queue->head == NULL) 
         return 1;
@@ -320,7 +316,7 @@ Tstack * FindPath(point Start, point End, astar_grid *Grid) {
                     if (EqualPoints(Neighbour, End)) {
                         Grid->Map[Neighbour.Row][Neighbour.Col].Location.Row = RefCoord.Row;
                         Grid->Map[Neighbour.Row][Neighbour.Col].Location.Col = RefCoord.Col;
-                        printf("The Destination cell has been found\n");
+                        // printf("The Destination cell has been found\n");
                         Tstack *FinalPath  = TracePath(End, Grid);
                         DestroyQueue(&OpenList);
                         return FinalPath;

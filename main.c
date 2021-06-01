@@ -36,10 +36,11 @@ const int SCREEN_WIDTH_PIXELS = 1280;
 const int SCREEN_HEIGHT_PIXELS = 720;
 const int TILE_SIZE_PIXELS = 16; 
 
-const int MAX_NUMBER_OF_TAXIBOTS = 10;
-const int MAX_NUMBER_OF_ORDERS = 50;
-const int MAX_NUMBER_OF_DEPOTS = 2;
-const double TAXIBOT_SPEED = 2;
+const int MAX_NUMBER_OF_TAXIBOTS = 20;
+const int MAX_NUMBER_OF_ORDERS = 100;
+const int MAX_NUMBER_OF_DEPOTS = 10;
+const double TAXIBOT_SPEED = 4;
+int xMouse, yMouse;
 
 
 static struct {
@@ -61,7 +62,8 @@ typedef enum passenger_status {
 
 typedef enum command_type {
 	ADD_TAXIBOT,
-	ADD_ORDER
+	ADD_ORDER,
+	ADD_DEPOT
 } command_type;
 
 typedef enum taxibot_status {
@@ -142,46 +144,42 @@ game_state * CreateGameState();
 astar_grid * CreateAStarGrid();
 taxibot_dispatcher * CreateDispatcher();
 void CreateOrder(Tqueue *Orders, int *OrdersLength, astar_grid *AStarGrid);
-void CreateDepots(depot *Depots);
+void CreateDepot(depot *Depots, int *DepotsLength);
 
+void HandleInput(game_state *GameState);
 void UpdateAndRenderPlay(game_state *GameState);
-
 void Update(game_state *GameState);
 void UpdateDispatcher(taxibot_dispatcher *Dispatcher, astar_grid *AStarGrid);
 void DispatcherRemoveOrder(taxibot_dispatcher *Dispatcher, order Order);
-
 void UpdateOrder(order *Order);
 void UpdateTaxibot(taxibot *Taxibot, astar_grid *AStarGrid);
 void UpdateTaxibots(taxibot *Taxibots, int TaxibotsLength, astar_grid *AStarGrid);
-void TaxibotFollowPath(taxibot *Taxibot, Tstack *Path);
+void TaxibotFollowPath(taxibot *Taxibot, Tstack *Path, point LastPosition);
 
 void Draw(game_state *GameState);
 void StartDrawing();
 void DrawGUI(game_state *GameState);
 void EndDrawing();
 void DrawTilemap(tilemap *Tilemap);
-void DrawDepots(depot *Depots);
+void DrawDepots(depot *Depots, int DepotsLength);
 void DrawOrder(order *Order);
 void DrawOrders(Tqueue *Orders);
 void DrawTaxibot(taxibot *Taxibot);
 void DrawTaxibots(taxibot *Taxibots, int TaxibotsLength);
 
-void AddTaxibot(taxibot *Taxibot, int *TaxibotsLength, depot *Depots);
+void AddTaxibot(taxibot *Taxibot, int *TaxibotsLength, depot *Depots, int DepotsLength);
 void AssignOrderToTaxibot(taxibot *Taxibot, order Order);
 bool IsOpenCellFunction(point Location, void *AStarGrid);
-int  CompareOrders(const void *OrderA, const void *OrderB);
-v2 TaxibotMoveTowardsPoint(taxibot *Taxibot, point Point);
-point CreatePoint(v2 Position);
+v2	 TaxibotMoveTowardsPoint(taxibot *Taxibot, point Point);
 point FindParkingSpot(v2 Point, astar_grid *AStarGrid);
+bool TaxibotFinishedFollowPath(v2 TaxibotPosition, point LastPosition);
+v2 	GetTaxiBotDirection(taxibot *Taxibot, point Point);
 
 void DestroyDispatcher(taxibot_dispatcher *Dispatcher);
 void DestroyAStarGrid(astar_grid * AStarGrid);
 void DestroyGameState(game_state *GameState);
 void DestroyWindow();
 
-
-void HandleInput(game_state *GameState);
-v2 GetTaxiBotDirection(taxibot *Taxibot, point Point);
 
 int main( int argc, char* args[] ) 
 {
@@ -243,7 +241,6 @@ game_state * CreateGameState()
 	InitQueue(&GameState->Commands, sizeof(command_type), NULL);
 	GameState->PreviousKeyboardState = NULL;
 
-
 	return GameState;
 }
 
@@ -262,7 +259,7 @@ astar_grid * CreateAStarGrid()
 	int k = 0;
 	for (int i = 0; i < AStarGrid->NumberRows; i++) {
 		for (int j = 0; j < AStarGrid->NumberCols; j++) {
-			if (i % 10 == 0 || j % 5 == 0) {
+			if (i % 10 == 2 || j % 10 == 3) {
 				AStarGrid->Map[i][j].MovementCost = my_random_function();
 			} else {
 				AStarGrid->Map[i][j].MovementCost = 1;
@@ -292,7 +289,6 @@ taxibot_dispatcher * CreateDispatcher()
 	Dispatcher->Depots = (depot *) malloc(MAX_NUMBER_OF_DEPOTS * sizeof(depot));
 	Dispatcher->DepotsLength = 0;
 
-	CreateDepots(Dispatcher->Depots);
 
 	// init orders
 	InitQueue(&Dispatcher->Orders, sizeof(order), NULL);
@@ -300,13 +296,23 @@ taxibot_dispatcher * CreateDispatcher()
 	return Dispatcher;
 }
 
-void CreateDepots(depot *Depots) 
-{
-	Depots[0].Position.X = 0;
-	Depots[0].Position.Y = 0;
+void CreateDepot(depot *Depots, int *DepotsLength) 
+{	
+	if ((*DepotsLength) < MAX_NUMBER_OF_DEPOTS) {
+		Depots[(*DepotsLength)].Position.X = abs(yMouse - SCREEN_HEIGHT_PIXELS);
+		Depots[(*DepotsLength)].Position.Y = xMouse;
 
-	Depots[1].Position.X = 44;
-	Depots[1].Position.Y = 79;
+		while ((int) (Depots[(*DepotsLength)].Position.X) % TILE_SIZE_PIXELS != 0) {
+			Depots[(*DepotsLength)].Position.X -= 1;
+		}
+
+		while ((int) (Depots[(*DepotsLength)].Position.Y) % TILE_SIZE_PIXELS != 0) {
+			Depots[(*DepotsLength)].Position.Y -= 1;
+		}
+
+		printf("depot (%.0f %.0f)\n", Depots[(*DepotsLength)].Position.X, Depots[(*DepotsLength)].Position.Y);
+		(*DepotsLength)++;
+	}
 }
 
 void UpdateAndRenderPlay(game_state *GameState)
@@ -324,24 +330,34 @@ void HandleInput(game_state *GameState)
 	SDL_Event event;
 	Uint8* keyboard;
 	while (SDL_PollEvent(&event)) {
-		if (event.type == SDL_QUIT) {
-			DestroyGameState(GameState);
-      		DestroyWindow();
-			exit(0);
-    	}
+		switch (event.type) {
+			case SDL_QUIT:
+			{
+				DestroyGameState(GameState);
+	      		DestroyWindow();
+				exit(0);
+	    	} break;
 
-    	if (event.type == SDL_KEYDOWN) {
-    		switch (event.key.keysym.sym) {
-    			case SDLK_RETURN:
-	    			PushQueue(&GameState->Commands, &(command_type){ADD_TAXIBOT});
-			    	break;
+	    	case SDL_KEYDOWN:
+	    	{
+	    		switch (event.key.keysym.sym) {
+	    			case SDLK_RETURN:
+		    			PushQueue(&GameState->Commands, &(command_type){ADD_TAXIBOT});
+				    	break;
 
-			    case SDLK_o:
-		    		PushQueue(&GameState->Commands, &(command_type){ADD_ORDER});
-				    break;
-    		}
+				    case SDLK_o:
+			    		PushQueue(&GameState->Commands, &(command_type){ADD_ORDER});
+					    break;
+	    		}
+	    	} break;
+
+	    	case SDL_MOUSEBUTTONDOWN:
+	    	{
+	    		PushQueue(&GameState->Commands, &(command_type){ADD_DEPOT});
+	    		SDL_GetMouseState(&xMouse, &yMouse);
+	    		printf("mouse event: %d %d\n", xMouse, yMouse);
+	    	} break;
     	}
-    	
     	nk_sdl_handle_event(&event);
 	}
 
@@ -356,12 +372,18 @@ void Update(game_state *GameState)
 
 		switch(Command) {
 			case ADD_TAXIBOT:
+				if (GameState->Dispatcher->DepotsLength > 0) {
 				AddTaxibot(&GameState->Dispatcher->Taxibots[GameState->Dispatcher->TaxibotsLength], &GameState->Dispatcher->TaxibotsLength,
-							GameState->Dispatcher->Depots);
+							GameState->Dispatcher->Depots, GameState->Dispatcher->DepotsLength);
+				}
 				break;
 
 			case ADD_ORDER:
 				CreateOrder(&GameState->Dispatcher->Orders, &GameState->Dispatcher->OrdersLength, GameState->AStarGrid);
+				break;
+
+			case ADD_DEPOT:
+				CreateDepot(GameState->Dispatcher->Depots, &GameState->Dispatcher->DepotsLength);
 				break;
 
 			default:
@@ -380,7 +402,7 @@ void Draw(game_state *GameState)
 	StartDrawing();
 	{	
 		DrawTilemap(&GameState->Tilemap);
-		DrawDepots(GameState->Dispatcher->Depots);
+		DrawDepots(GameState->Dispatcher->Depots, GameState->Dispatcher->DepotsLength);
 		DrawTaxibots(GameState->Dispatcher->Taxibots, GameState->Dispatcher->TaxibotsLength);
 		DrawOrders(&GameState->Dispatcher->Orders);
 		// DrawGUI(GameState);
@@ -432,23 +454,27 @@ void UpdateTaxibot(taxibot *Taxibot, astar_grid *AStarGrid)
 			break;
 
 		case TAXIBOT_RECEIVED_ORDER:
+		{
 			Taxibot->Path = FindPath(
-								CreatePoint((v2) {Taxibot->Position.X / TILE_SIZE_PIXELS, Taxibot->Position.Y / TILE_SIZE_PIXELS}), 
+								(point) {(int) (Taxibot->Position.X / TILE_SIZE_PIXELS),(int) (Taxibot->Position.Y / TILE_SIZE_PIXELS)}, 
 								FindParkingSpot(Taxibot->Order.Position, AStarGrid), AStarGrid
 							);
 			if (Taxibot->Path != NULL) {
-				PrintStack(Taxibot->Path);
 				Taxibot->Status = TAXIBOT_TO_ORDER;
 			} else {
 				Taxibot->Status = TAXIBOT_AVAILABLE;
 			}
-			break;
+		} break;
 
 		case TAXIBOT_TO_ORDER:
-			TaxibotFollowPath(Taxibot, Taxibot->Path);
-			if (!Taxibot->Path || IsStackEmpty(Taxibot->Path)) {
+		{	
+			point LastPosition = FindParkingSpot(Taxibot->Order.Position, AStarGrid);
+			TaxibotFollowPath(Taxibot, Taxibot->Path, LastPosition);
+
+			if ((!Taxibot->Path || IsStackEmpty(Taxibot->Path)) && 
+				TaxibotFinishedFollowPath(Taxibot->Position, LastPosition)) {
 				Taxibot->Path = FindPath(
-									CreatePoint((v2) {Taxibot->Position.X / TILE_SIZE_PIXELS, Taxibot->Position.Y / TILE_SIZE_PIXELS}), 
+									(point) {(int) (Taxibot->Position.X / TILE_SIZE_PIXELS),(int) (Taxibot->Position.Y / TILE_SIZE_PIXELS)}, 
 									FindParkingSpot(Taxibot->Order.Destination, AStarGrid), AStarGrid
 								);		
 				if (Taxibot->Path != NULL) {
@@ -458,35 +484,41 @@ void UpdateTaxibot(taxibot *Taxibot, astar_grid *AStarGrid)
 					Taxibot->Status = TAXIBOT_AVAILABLE;
 				}
 			}
-			break;
+		} break;
 
 		case TAXIBOT_TO_DEST:
-			TaxibotFollowPath(Taxibot, Taxibot->Path);
-			if (!Taxibot->Path || IsStackEmpty(Taxibot->Path)) {
+		{
+			point LastPosition = FindParkingSpot(Taxibot->Order.Destination, AStarGrid);
+			TaxibotFollowPath(Taxibot, Taxibot->Path, LastPosition);
+
+			if ((!Taxibot->Path || IsStackEmpty(Taxibot->Path)) &&
+				TaxibotFinishedFollowPath(Taxibot->Position, LastPosition)) {
 				Taxibot->Status = TAXIBOT_AVAILABLE;
 				Taxibot->Order.Status = ARRIVED;
 			}
-			break;	
+		} break;	
 	}
 }
 
-void TaxibotFollowPath(taxibot *Taxibot, Tstack *Path)
+void TaxibotFollowPath(taxibot *Taxibot, Tstack *Path, point LastPosition)
 {
-
-	if (!Path || IsStackEmpty(Taxibot->Path)) {
+	if ((!Path || IsStackEmpty(Taxibot->Path)) && TaxibotFinishedFollowPath(Taxibot->Position, LastPosition))
 		return;
-	}
 
-	if (Taxibot->ID == 1) {
-		int b = 1;
-	}
-
-	v2 Distance = TaxibotMoveTowardsPoint(Taxibot, CreatePoint(Taxibot->NextPosition));
+	v2 Distance = TaxibotMoveTowardsPoint(Taxibot, (point) {(int) (Taxibot->NextPosition.X), (int) (Taxibot->NextPosition.Y)});
 	if (Distance.X < TAXIBOT_SPEED && Distance.Y < TAXIBOT_SPEED) {
-		Tstack *stack = PopStack(&Taxibot->Path); // TODooooooooooooooooooooo WTFF??????!!!!!!!!!!!!
+		Tstack *stack = PopStack(&Taxibot->Path);
 		Taxibot->NextPosition = (v2) {stack->Data.Location.Row * TILE_SIZE_PIXELS + TILE_SIZE_PIXELS/2, stack->Data.Location.Col * TILE_SIZE_PIXELS + TILE_SIZE_PIXELS/2};
 		free(stack); 
 	}
+}
+
+bool TaxibotFinishedFollowPath(v2 TaxibotPosition, point LastPosition)
+{
+	if (((TaxibotPosition.X - TILE_SIZE_PIXELS / 2) / TILE_SIZE_PIXELS) == (double)LastPosition.Row && 
+		((TaxibotPosition.Y - TILE_SIZE_PIXELS / 2) / TILE_SIZE_PIXELS) == (double)LastPosition.Col)
+		return true;
+	return false;
 }
 
 point FindParkingSpot(v2 Location, astar_grid *AStarGrid) {
@@ -500,15 +532,6 @@ point FindParkingSpot(v2 Location, astar_grid *AStarGrid) {
     		}
     	}
     }
-}
-
-point CreatePoint(v2 Position)
-{	
-	point Point = {0};
-	Point.Row = (int) (Position.X);
-	Point.Col = (int) (Position.Y);
-
-	return Point;
 }
 
 v2 GetTaxiBotDirection(taxibot *Taxibot, point Point) 
@@ -531,11 +554,6 @@ v2 GetTaxiBotDirection(taxibot *Taxibot, point Point)
 
 v2 TaxibotMoveTowardsPoint(taxibot *Taxibot, point Point) 
 {
-
-	if (Taxibot->ID == 1) {
-		int b = 1;
-	}
-
 	v2 Distance = (v2) { abs(Taxibot->Position.X - Point.Row), 
 		                 abs(Taxibot->Position.Y - Point.Col)};
 
@@ -558,24 +576,23 @@ v2 TaxibotMoveTowardsPoint(taxibot *Taxibot, point Point)
 	return Distance;
 }
 
-void AddTaxibot(taxibot *Taxibot, int *TaxibotsLength, depot *Depots)
+void AddTaxibot(taxibot *Taxibot, int *TaxibotsLength, depot *Depots, int DepotsLength)
 {	
 	if ((*TaxibotsLength) >= MAX_NUMBER_OF_TAXIBOTS)
 		return;
 
-	int i = rand() % MAX_NUMBER_OF_DEPOTS;
-	Taxibot->Position.X = TILE_SIZE_PIXELS * Depots[i].Position.X + TILE_SIZE_PIXELS/2;
-	Taxibot->Position.Y = TILE_SIZE_PIXELS * Depots[i].Position.Y + TILE_SIZE_PIXELS/2;
+	int i = rand() % DepotsLength;
+	Taxibot->Position.X = Depots[i].Position.X + TILE_SIZE_PIXELS/2;
+	Taxibot->Position.Y = Depots[i].Position.Y + TILE_SIZE_PIXELS/2;
 	Taxibot->NextPosition = Taxibot->Position;
 	Taxibot->Status = TAXIBOT_AVAILABLE;
 	Taxibot->Path = NULL;
 	(*TaxibotsLength)++;
 }
 
-void ShowQueue(Tqueue *Queue)
+void ShowOrdersQueue(Tqueue *Queue)
 {
 	node *Temp = Queue->head;
-    
     while (Temp != NULL) {
         printf("(O:%.0f %.0f)->", ((order*)((Temp)->Data))->Position.X, ((order*)((Temp)->Data))->Position.Y);
         Temp = Temp->next;
@@ -611,16 +628,10 @@ void CreateOrder(Tqueue *Orders, int *OrdersLength, astar_grid *AStarGrid)
 			printf("---Order: (%.0f %.0f) (%.0f %.0f)\n", Order.Position.X, Order.Position.Y, Order.Destination.X, Order.Destination.Y);
 			PushQueue(Orders, &Order);
 			(*OrdersLength)++;
-			// ShowQueue(Orders);
 		} else {
 			printf("Invalid order\n");
 		}
 	}
-}
-
-int CompareOrders(const void *OrderA, const void *OrderB)
-{
-	// CAST LA ORDER SI DIFERENTA PE TIMESTAMPS
 }
 
 bool IsOpenCellFunction(point Location, void *AStarGrid) 
@@ -693,11 +704,11 @@ void DrawOrder(order *Order) {
 
 }
 
-void DrawDepots(depot *Depots)
+void DrawDepots(depot *Depots, int DepotsLength)
 {
-	for (int i = 0; i < MAX_NUMBER_OF_DEPOTS; i++) {
-		SDL_FRect r = {.x = TILE_SIZE_PIXELS * Depots[i].Position.Y, 
-					   .y = TILE_SIZE_PIXELS * Depots[i].Position.X, 
+	for (int i = 0; i < DepotsLength; i++) {
+		SDL_FRect r = {.x = Depots[i].Position.Y, 
+					   .y = Depots[i].Position.X, 
 					   .w = TILE_SIZE_PIXELS, .h = TILE_SIZE_PIXELS};
 
 		DrawRectangle(r, 255, 0, 145);
@@ -710,167 +721,6 @@ void DrawRectangle(SDL_FRect r, int R, int G, int B)
     SDL_SetRenderDrawColor( WindowManager.Renderer, R, G, B, 255);
     SDL_RenderFillRectF( WindowManager.Renderer, &r );
 }
-
-// Tstack *Path = NULL;
-// Tstack *TaxibotPath = NULL;
-// taxibot Taxibot = {0, 0, 2.0};
-// point Point = {0, 0};
-// int First = 0;
-
-// void SearchForPath(game_state *GameState, point Start, point End) {
-// 	Taxibot.X = 0;
-// 	Taxibot.Y = 0;
-// 	Point.Row = 0;
-// 	Point.Col = 0;
-// 	First = 0;
-
-// 	DestroyStack(&Path);
-// 	Path = FindPath(Start, End, GameState->AStarGrid);
-// 	ClonePath();
-// }
-
-// void GetTaxiCoordinates() {
-// 	if (TaxibotPath != NULL || MoveTowardsPoint(Point, Taxibot) == 0) {
-// 		if (MoveTowardsPoint(Point, Taxibot) == 1) {
-// 			Point  = PopStack(&TaxibotPath)->Data.Location;
-// 		} 
-
-// 		if (First == 0) {
-// 			Taxibot.X = Point.Row * TILE_SIZE_PIXELS;
-// 			Taxibot.Y = Point.Col * TILE_SIZE_PIXELS;
-// 			First++;
-// 		}
-
-// 		Taxibot.DirectionX = GetTaxiDirection(Point.Row, Taxibot.X);
-// 		Taxibot.DirectionY = GetTaxiDirection(Point.Col, Taxibot.Y);
-// 		Taxibot.X += Taxibot.DirectionX * Taxibot.Speed; 
-// 		Taxibot.Y += Taxibot.DirectionY * Taxibot.Speed;
-// 	}
-// }
-
-// point * FindParkingSpot(astar_grid *AStarGrid, point Point) {
-// 	for (int add_Row = -1; add_Row <= 1; add_Row++) {
-//     	for (int add_Col = -1; add_Col <= 1; add_Col++) {
-//     		point * ParkingSpot = calloc(1, sizeof(point));
-//     		if (ParkingSpot == NULL) {
-//     			return NULL;
-//     		}
-
-//     		ParkingSpot->Row = Point.Row + add_Row;
-//     		ParkingSpot->Col = Point.Col + add_Col;
-//     		if (IsNeighbour(Point, *ParkingSpot, AStarGrid) && AStarGrid->Map[ParkingSpot->Row][ParkingSpot->Col].MovementCost == 1) {
-//     			return ParkingSpot;
-//     		}
-//     	}
-//     }
-
-//     return NULL;
-// }
-
-// void GetPassengerPosition(game_state *GameState, point *Position) {
-// 	point *ParkingSpot = NULL;
-
-// 	do {
-// 		Position->Row = rand() % (GameState->AStarGrid->NumberRows + 1);
-// 		Position->Col = rand() % (GameState->AStarGrid->NumberCols + 1);
-// 		ParkingSpot = FindParkingSpot(GameState->AStarGrid, *Position);
-// 	} while (GetCell(*Position, GameState->AStarGrid) == NULL ||
-// 			 ParkingSpot == NULL ||
-// 			 GameState->AStarGrid->Map[Position->Row][Position->Col].MovementCost != 0);
-
-// 	free(ParkingSpot);
-// }
-
-// passenger GeneratePassenger(game_state *GameState){
-// 	passenger Passenger = {};
-// 	Passenger.Status = WAITING;
-
-// 	GetPassengerPosition(GameState, &Passenger.Command.Start);
-// 	GetPassengerPosition(GameState, &Passenger.Command.Destination);
-
-// 	return Passenger;
-// }
-
-// point Aux = {};
-// passenger Passenger = {};	
-// command Command = {};
-// Tqueue ListOfCommands;
-
-// int CompareLocations(const void *Value1, const void *Value2) {
-// 	if (((point*)(Value1))->Row < ((point*)(Value2))->Row) {
-// 		return 1;
-// 	} else if (((point*)(Value1))->Col < ((point*)(Value2))->Col) {
-// 		return 1;
-// 	}
-// 	return 0;
-// }
-
-// void ShowQueue(Tqueue *Queue) {
-// 	node *Temp = Queue->head;
-//     while (Temp != NULL) {
-//         printf("(%d %d) (%d %d)->", ((command*)(Temp->Data))->Start.Row, ((command*)((Temp)->Data))->Start.Col,
-//          						((command*)((Temp)->Data))->Destination.Row, ((command*)((Temp)->Data))->Destination.Col);
-//         Temp = Temp->next;
-//     }
-// }
-
-// int q = 0;
-// void CommandsList(game_state *GameState) {
-// 	point *ParkingSpotLocation = NULL;
-// 	point *ParkingSpotDestination = NULL;
-// 	while (q < 10) {
-// 		Passenger = GeneratePassenger(GameState);
-// 		printf("?????(%d %d) (%d %d)\n", Passenger.Command.Start.Row,  Passenger.Command.Start.Col,
-//          						 Passenger.Command.Destination.Row,  Passenger.Command.Destination.Col);
-// 		// ParkingSpotLocation = FindParkingSpot(GameState->AStarGrid, Passenger.Command.Start);
-// 		// ParkingSpotDestination = FindParkingSpot(GameState->AStarGrid, Passenger.Command.Destination);
-
-// 		// Passenger.Command.Start.Row = ParkingSpotLocation->Row;
-// 		// Passenger.Start.Col = ParkingSpotLocation->Col;
-// 		// Passenger.Destination.Row = ParkingSpotDestination->Row;
-// 		// Passenger.Destination.Col = ParkingSpotDestination->Col;
-// 		// free(ParkingSpotLocation);
-// 		// free(ParkingSpotDestination);
-
-// 		PushQueue(&ListOfCommands, &Passenger);
-// 		q++;
-// 	}
-
-// 	printf("(========)\n");
-// 	ShowQueue(&ListOfCommands);
-// 	printf("=======\n");
-// }
-
-
-// void DrawPath(Tstack **FoundPath)
-// {	
-// 	Tstack *temp = *FoundPath;
-// 	while (temp != NULL) {
-// 		cell Cell = temp->Data;
-// 		SDL_FRect r = {.x = TILE_SIZE_PIXELS * Cell.Location.Col, 
-// 					   .y = TILE_SIZE_PIXELS * Cell.Location.Row, 
-// 					   .w = TILE_SIZE_PIXELS, .h = TILE_SIZE_PIXELS};
-// 		DrawRectangle(r, 0, 0, 205);	
-// 		temp = temp->next;
-// 	}
-// }
-
-// void ClonePath() 
-// {
-// 	Tstack *temp = NULL;;
-// 	while (!IsStackEmpty(Path)) {
-// 		cell Cell = PopStack(&Path)->Data;
-// 		PushStack(&temp, Cell);
-// 	}
-
-// 	while (!IsStackEmpty(temp)) {
-// 		cell Cell = PopStack(&temp)->Data;
-// 		PushStack(&Path, Cell);
-// 		PushStack(&TaxibotPath, Cell);
-// 	}
-// }
-
-
 
 void DrawGUI(game_state *GameState)
 {
@@ -953,5 +803,3 @@ void DestroyWindow()
 	SDL_DestroyWindow(WindowManager.Handler);
 	SDL_Quit();
 }
-
-
