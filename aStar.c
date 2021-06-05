@@ -3,7 +3,7 @@
 cell * GetCell(int X, int Y, astar_grid *Grid) {
     if ((X >= 0) && (X < Grid->NumberRows)
          && (Y >= 0) && (Y < Grid->NumberCols)) {
-        printf("astar grid value: [%d][%d] = %d ", X, Y, Grid->Map[X][Y]);
+        DEBUG_PRINTL("astar grid value: [%d][%d] = %d ", X, Y, Grid->Map[X][Y]);
         return &Grid->Map[X][Y];
     }
     
@@ -53,7 +53,7 @@ void InitQueue(Tqueue *Queue, size_t memSize, compare_function Function)
 void PrintQueue(Tqueue *Queue) {
     node *Temp = Queue->head;
     while (Temp != NULL) {
-        printf("(%d %d %.0f)->", ((cell*)((Temp)->Data))->Location.Row, ((cell*)((Temp)->Data))->Location.Col, ((cell*)((Temp)->Data))->f);
+        DEBUG_PRINT("(%d %d %.0f)->", ((cell*)((Temp)->Data))->Location.Row, ((cell*)((Temp)->Data))->Location.Col, ((cell*)((Temp)->Data))->f);
         Temp = Temp->next;
     }
 }
@@ -196,10 +196,10 @@ Tstack * PopStack(Tstack **Stack) {
 void PrintStack(Tstack *Stack) {
     Tstack *Temp = Stack;
     while (Temp != NULL) {
-        printf("-> (%d,%d)", Temp->Data.Location.Row, Temp->Data.Location.Col);
+        DEBUG_PRINT("-> (%d,%d)", Temp->Data.Location.Row, Temp->Data.Location.Col);
         Temp = Temp->next;
     }
-    printf("\n");
+    DEBUG_PRINT("\n");
 }
 
 void DestroyStack(Tstack **Stack) {
@@ -252,12 +252,12 @@ bool ElementIsInOpenList(Tqueue *Queue, cell Node) {
 
 Tstack * FindPath(point Start, point End, astar_grid *Grid) {
     if (Grid->IsOpenCellFunction(Start, Grid) == false || Grid->IsOpenCellFunction(End, Grid) == false) {
-        printf("Source or Destination is blocked\n");
+        DEBUG_PRINTL("Source or Destination is blocked\n");
         return NULL;
     }
 
     if (EqualPoints(Start, End)) {
-        printf("We are already at the Destination\n");
+        DEBUG_PRINTL("We are already at the Destination\n");
         return NULL;
     }
 
@@ -343,6 +343,6 @@ Tstack * FindPath(point Start, point End, astar_grid *Grid) {
         }
     }
 
-    printf("Failed to find the Destination Cell\n");
+    DEBUG_PRINTL("Failed to find the Destination Cell\n");
     return NULL;
 }

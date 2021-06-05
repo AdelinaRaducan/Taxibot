@@ -31,17 +31,17 @@
 
 #define forever while(1)
 #define MS_PER_FRAME 16
+// #define DEBUG_MODE 
 
 const int SCREEN_WIDTH_PIXELS = 1280;
 const int SCREEN_HEIGHT_PIXELS = 720;
 const int TILE_SIZE_PIXELS = 16; 
 
-const int MAX_NUMBER_OF_TAXIBOTS = 20;
+const int MAX_NUMBER_OF_RobotaxiS = 20;
 const int MAX_NUMBER_OF_ORDERS = 100;
 const int MAX_NUMBER_OF_DEPOTS = 10;
-const double TAXIBOT_SPEED = 4;
+const double Robotaxi_SPEED = 4;
 int xMouse, yMouse;
-
 
 static struct {
 	SDL_Window *Handler;
@@ -61,19 +61,22 @@ typedef enum passenger_status {
 } passenger_status;
 
 typedef enum command_type {
-	ADD_TAXIBOT,
+	ADD_Robotaxi,
 	ADD_ORDER,
-	ADD_DEPOT
+	ADD_DEPOT,
+	RETURN_TO_DEPOTS
 } command_type;
 
-typedef enum taxibot_status {
-	TAXIBOT_AVAILABLE,
-	TAXIBOT_WORKING,
-	TAXIBOT_RECEIVED_ORDER,
-	TAXIBOT_TO_ORDER,
-	TAXIBOT_TO_DEST,
-	TAXIBOT_CHARGING
-} taxibot_status;
+typedef enum Robotaxi_status {
+	ROBOTAXI_AVAILABLE,
+	ROBOTAXI_WORKING,
+	ROBOTAXI_RECEIVED_ORDER,
+	ROBOTAXI_TO_ORDER,
+	ROBOTAXI_TO_DEST,
+	ROBOTAXI_CHARGING,
+	ROBOTAXI_END_SHIFT,
+	ROBOTAXI_TO_DEPOT
+} Robotaxi_status;
 
 typedef struct v2 {
 	union {
@@ -103,37 +106,37 @@ typedef struct order {
 	passenger_status Status;
 } order;
 
-typedef struct taxibot_dispatcher;
+typedef struct Robotaxi_dispatcher;
 
-typedef struct taxibot {
+typedef struct Robotaxi {
 	int ID;
 	v2 Position;
 	v2 Direction;
 	double Speed;
 	order Order;
-	taxibot_status Status;
+	Robotaxi_status Status;
 	Tstack *Path;
-	struct taxibot_dispatcher *Dispatcher;
+	struct Robotaxi_dispatcher *Dispatcher;
 	v2 NextPosition;
-} taxibot;
+} Robotaxi;
 
 typedef struct depot {
 	v2 Position;
 } depot;
 
-typedef struct taxibot_dispatcher {
+typedef struct Robotaxi_dispatcher {
 	Tqueue Orders;
-	taxibot *Taxibots;
+	Robotaxi *Robotaxis;
 	depot *Depots;
-	int TaxibotsLength;
+	int RobotaxisLength;
 	int OrdersLength;
 	int DepotsLength;
-} taxibot_dispatcher;
+} Robotaxi_dispatcher;
 
 typedef struct game_state {
 	tilemap Tilemap;
 	astar_grid *AStarGrid;
-	taxibot_dispatcher *Dispatcher;
+	Robotaxi_dispatcher *Dispatcher;
 	Tqueue Commands;
 	Uint8 *PreviousKeyboardState;
 } game_state;
@@ -142,19 +145,21 @@ typedef struct game_state {
 void CreateWindow(int Width, int Height);
 game_state * CreateGameState();
 astar_grid * CreateAStarGrid();
-taxibot_dispatcher * CreateDispatcher();
+Robotaxi_dispatcher * CreateDispatcher();
 void CreateOrder(Tqueue *Orders, int *OrdersLength, astar_grid *AStarGrid);
 void CreateDepot(depot *Depots, int *DepotsLength);
 
 void HandleInput(game_state *GameState);
 void UpdateAndRenderPlay(game_state *GameState);
 void Update(game_state *GameState);
-void UpdateDispatcher(taxibot_dispatcher *Dispatcher, astar_grid *AStarGrid);
-void DispatcherRemoveOrder(taxibot_dispatcher *Dispatcher, order Order);
+void UpdateDispatcher(Robotaxi_dispatcher *Dispatcher, astar_grid *AStarGrid);
+void DispatcherRemoveOrder(Robotaxi_dispatcher *Dispatcher, order Order);
 void UpdateOrder(order *Order);
-void UpdateTaxibot(taxibot *Taxibot, astar_grid *AStarGrid);
-void UpdateTaxibots(taxibot *Taxibots, int TaxibotsLength, astar_grid *AStarGrid);
-void TaxibotFollowPath(taxibot *Taxibot, Tstack *Path, point LastPosition);
+void UpdateRobotaxi(Robotaxi *Robotaxi, astar_grid *AStarGrid, depot *Depots, int DepotsLength);
+void UpdateRobotaxis(Robotaxi *Robotaxis, int RobotaxisLength, astar_grid *AStarGrid, depot *Depots, int DepotsLength);
+void RobotaxiFollowPath(Robotaxi *Robotaxi, Tstack *Path, point LastPosition);
+void RobotaxisReturnToDepots(Robotaxi *Robotaxis, int RobotaxisLength);
+v2 FindClosestDepot(v2 RobotaxiPosition, depot *Depots, int DepotsLength);
 
 void Draw(game_state *GameState);
 void StartDrawing();
@@ -164,18 +169,18 @@ void DrawTilemap(tilemap *Tilemap);
 void DrawDepots(depot *Depots, int DepotsLength);
 void DrawOrder(order *Order);
 void DrawOrders(Tqueue *Orders);
-void DrawTaxibot(taxibot *Taxibot);
-void DrawTaxibots(taxibot *Taxibots, int TaxibotsLength);
+void DrawRobotaxi(Robotaxi *Robotaxi);
+void DrawRobotaxis(Robotaxi *Robotaxis, int RobotaxisLength);
 
-void AddTaxibot(taxibot *Taxibot, int *TaxibotsLength, depot *Depots, int DepotsLength);
-void AssignOrderToTaxibot(taxibot *Taxibot, order Order);
+void AddRobotaxi(Robotaxi *Robotaxi, int *RobotaxisLength, depot *Depots, int DepotsLength);
+void AssignOrderToRobotaxi(Robotaxi *Robotaxi, order Order);
 bool IsOpenCellFunction(point Location, void *AStarGrid);
-v2	 TaxibotMoveTowardsPoint(taxibot *Taxibot, point Point);
+v2	 RobotaxiMoveTowardsPoint(Robotaxi *Robotaxi, point Point);
 point FindParkingSpot(v2 Point, astar_grid *AStarGrid);
-bool TaxibotFinishedFollowPath(v2 TaxibotPosition, point LastPosition);
-v2 	GetTaxiBotDirection(taxibot *Taxibot, point Point);
+bool RobotaxiFinishedFollowPath(v2 RobotaxiPosition, point LastPosition);
+v2 	GetRobotaxiDirection(Robotaxi *Robotaxi, point Point);
 
-void DestroyDispatcher(taxibot_dispatcher *Dispatcher);
+void DestroyDispatcher(Robotaxi_dispatcher *Dispatcher);
 void DestroyAStarGrid(astar_grid * AStarGrid);
 void DestroyGameState(game_state *GameState);
 void DestroyWindow();
@@ -276,16 +281,16 @@ astar_grid * CreateAStarGrid()
 	return AStarGrid;
 }
 
-taxibot_dispatcher * CreateDispatcher()
+Robotaxi_dispatcher * CreateDispatcher()
 {
-	taxibot_dispatcher *Dispatcher = (taxibot_dispatcher *) malloc(sizeof(taxibot_dispatcher));
-	Dispatcher->Taxibots = (taxibot *) malloc (MAX_NUMBER_OF_TAXIBOTS * sizeof(taxibot));
-	for (int i = 0; i < MAX_NUMBER_OF_TAXIBOTS; ++i) {
-		Dispatcher->Taxibots[i].Speed = TAXIBOT_SPEED;
-		Dispatcher->Taxibots[i].ID = i;
+	Robotaxi_dispatcher *Dispatcher = (Robotaxi_dispatcher *) malloc(sizeof(Robotaxi_dispatcher));
+	Dispatcher->Robotaxis = (Robotaxi *) malloc (MAX_NUMBER_OF_RobotaxiS * sizeof(Robotaxi));
+	for (int i = 0; i < MAX_NUMBER_OF_RobotaxiS; ++i) {
+		Dispatcher->Robotaxis[i].Speed = Robotaxi_SPEED;
+		Dispatcher->Robotaxis[i].ID = i;
 	}
 
-	Dispatcher->TaxibotsLength = 0;
+	Dispatcher->RobotaxisLength = 0;
 	Dispatcher->Depots = (depot *) malloc(MAX_NUMBER_OF_DEPOTS * sizeof(depot));
 	Dispatcher->DepotsLength = 0;
 
@@ -310,7 +315,6 @@ void CreateDepot(depot *Depots, int *DepotsLength)
 			Depots[(*DepotsLength)].Position.Y -= 1;
 		}
 
-		printf("depot (%.0f %.0f)\n", Depots[(*DepotsLength)].Position.X, Depots[(*DepotsLength)].Position.Y);
 		(*DepotsLength)++;
 	}
 }
@@ -342,11 +346,15 @@ void HandleInput(game_state *GameState)
 	    	{
 	    		switch (event.key.keysym.sym) {
 	    			case SDLK_RETURN:
-		    			PushQueue(&GameState->Commands, &(command_type){ADD_TAXIBOT});
+		    			PushQueue(&GameState->Commands, &(command_type){ADD_Robotaxi});
 				    	break;
 
 				    case SDLK_o:
 			    		PushQueue(&GameState->Commands, &(command_type){ADD_ORDER});
+					    break;
+
+					case SDLK_d:
+			    		PushQueue(&GameState->Commands, &(command_type){RETURN_TO_DEPOTS});
 					    break;
 	    		}
 	    	} break;
@@ -355,7 +363,6 @@ void HandleInput(game_state *GameState)
 	    	{
 	    		PushQueue(&GameState->Commands, &(command_type){ADD_DEPOT});
 	    		SDL_GetMouseState(&xMouse, &yMouse);
-	    		printf("mouse event: %d %d\n", xMouse, yMouse);
 	    	} break;
     	}
     	nk_sdl_handle_event(&event);
@@ -371,9 +378,9 @@ void Update(game_state *GameState)
 		PeekQueue(&GameState->Commands, &Command);
 
 		switch(Command) {
-			case ADD_TAXIBOT:
+			case ADD_Robotaxi:
 				if (GameState->Dispatcher->DepotsLength > 0) {
-				AddTaxibot(&GameState->Dispatcher->Taxibots[GameState->Dispatcher->TaxibotsLength], &GameState->Dispatcher->TaxibotsLength,
+				AddRobotaxi(&GameState->Dispatcher->Robotaxis[GameState->Dispatcher->RobotaxisLength], &GameState->Dispatcher->RobotaxisLength,
 							GameState->Dispatcher->Depots, GameState->Dispatcher->DepotsLength);
 				}
 				break;
@@ -386,6 +393,9 @@ void Update(game_state *GameState)
 				CreateDepot(GameState->Dispatcher->Depots, &GameState->Dispatcher->DepotsLength);
 				break;
 
+			case RETURN_TO_DEPOTS:
+				RobotaxisReturnToDepots(GameState->Dispatcher->Robotaxis, GameState->Dispatcher->RobotaxisLength);
+
 			default:
 				break;
 		}
@@ -394,7 +404,8 @@ void Update(game_state *GameState)
 	}
 
 	UpdateDispatcher(GameState->Dispatcher, GameState->AStarGrid);
-	UpdateTaxibots(GameState->Dispatcher->Taxibots, GameState->Dispatcher->TaxibotsLength, GameState->AStarGrid);
+	UpdateRobotaxis(GameState->Dispatcher->Robotaxis, GameState->Dispatcher->RobotaxisLength, GameState->AStarGrid,
+					GameState->Dispatcher->Depots, GameState->Dispatcher->DepotsLength);
 }
 
 void Draw(game_state *GameState)
@@ -403,120 +414,143 @@ void Draw(game_state *GameState)
 	{	
 		DrawTilemap(&GameState->Tilemap);
 		DrawDepots(GameState->Dispatcher->Depots, GameState->Dispatcher->DepotsLength);
-		DrawTaxibots(GameState->Dispatcher->Taxibots, GameState->Dispatcher->TaxibotsLength);
+		DrawRobotaxis(GameState->Dispatcher->Robotaxis, GameState->Dispatcher->RobotaxisLength);
 		DrawOrders(&GameState->Dispatcher->Orders);
 		// DrawGUI(GameState);
 	}
 	EndDrawing();
 }
 
-void UpdateDispatcher(taxibot_dispatcher *Dispatcher, astar_grid *AStarGrid) 
+void UpdateDispatcher(Robotaxi_dispatcher *Dispatcher, astar_grid *AStarGrid) 
 {	
 	if (IsQueueEmpty(&Dispatcher->Orders)) {
 		return;
 	}
 
-	for (int i = 0; i < Dispatcher->TaxibotsLength; i++) {
+	for (int i = 0; i < Dispatcher->RobotaxisLength; i++) {
 		if (IsQueueEmpty(&Dispatcher->Orders)) {
 			break;
 		}
 
-		if (Dispatcher->Taxibots[i].Status == TAXIBOT_AVAILABLE) {
+		if (Dispatcher->Robotaxis[i].Status == ROBOTAXI_AVAILABLE) {
 			order aux = {};
 			PeekQueue(&Dispatcher->Orders, &aux);
 			PopQueue(&Dispatcher->Orders);
-			AssignOrderToTaxibot(&Dispatcher->Taxibots[i], aux);
+			AssignOrderToRobotaxi(&Dispatcher->Robotaxis[i], aux);
 			Dispatcher->OrdersLength--;
 		}
 	}
 }
 
-void AssignOrderToTaxibot(taxibot *Taxibot, order Order)
+void AssignOrderToRobotaxi(Robotaxi *Robotaxi, order Order)
 {
-	Taxibot->Order = Order;
-	Taxibot->Order.Status = WAITING;
-	Taxibot->Status = TAXIBOT_RECEIVED_ORDER;
+	Robotaxi->Order = Order;
+	Robotaxi->Order.Status = WAITING;
+	Robotaxi->Status = ROBOTAXI_RECEIVED_ORDER;
 }
 
-void UpdateTaxibots(taxibot *Taxibots, int TaxibotsLength, astar_grid *AStarGrid) 
+void UpdateRobotaxis(Robotaxi *Robotaxis, int RobotaxisLength, astar_grid *AStarGrid, depot *Depots, int DepotsLength) 
 {
-	for (int i = 0; i < TaxibotsLength; i++) {
-		UpdateTaxibot(&Taxibots[i], AStarGrid);
+	for (int i = 0; i < RobotaxisLength; i++) {
+		UpdateRobotaxi(&Robotaxis[i], AStarGrid, Depots, DepotsLength);
 	}
 }
 
-void UpdateTaxibot(taxibot *Taxibot, astar_grid *AStarGrid)
+void UpdateRobotaxi(Robotaxi *Robotaxi, astar_grid *AStarGrid, depot *Depots, int DepotsLength)
 {	
-	if (!Taxibot) return;
+	if (!Robotaxi) return;
 
-	switch (Taxibot->Status) {
-		case TAXIBOT_AVAILABLE:
+	switch (Robotaxi->Status) {
+		case ROBOTAXI_AVAILABLE:
 			break;
 
-		case TAXIBOT_RECEIVED_ORDER:
+		case ROBOTAXI_RECEIVED_ORDER:
 		{
-			Taxibot->Path = FindPath(
-								(point) {(int) (Taxibot->Position.X / TILE_SIZE_PIXELS),(int) (Taxibot->Position.Y / TILE_SIZE_PIXELS)}, 
-								FindParkingSpot(Taxibot->Order.Position, AStarGrid), AStarGrid
+			Robotaxi->Path = FindPath(
+								(point) {(int) (Robotaxi->Position.X / TILE_SIZE_PIXELS),(int) (Robotaxi->Position.Y / TILE_SIZE_PIXELS)}, 
+								FindParkingSpot(Robotaxi->Order.Position, AStarGrid), AStarGrid
 							);
-			if (Taxibot->Path != NULL) {
-				Taxibot->Status = TAXIBOT_TO_ORDER;
+			if (Robotaxi->Path != NULL) {
+				Robotaxi->Status = ROBOTAXI_TO_ORDER;
 			} else {
-				Taxibot->Status = TAXIBOT_AVAILABLE;
+				Robotaxi->Status = ROBOTAXI_AVAILABLE;
 			}
 		} break;
 
-		case TAXIBOT_TO_ORDER:
+		case ROBOTAXI_TO_ORDER:
 		{	
-			point LastPosition = FindParkingSpot(Taxibot->Order.Position, AStarGrid);
-			TaxibotFollowPath(Taxibot, Taxibot->Path, LastPosition);
+			point LastPosition = FindParkingSpot(Robotaxi->Order.Position, AStarGrid);
+			RobotaxiFollowPath(Robotaxi, Robotaxi->Path, LastPosition);
 
-			if ((!Taxibot->Path || IsStackEmpty(Taxibot->Path)) && 
-				TaxibotFinishedFollowPath(Taxibot->Position, LastPosition)) {
-				Taxibot->Path = FindPath(
-									(point) {(int) (Taxibot->Position.X / TILE_SIZE_PIXELS),(int) (Taxibot->Position.Y / TILE_SIZE_PIXELS)}, 
-									FindParkingSpot(Taxibot->Order.Destination, AStarGrid), AStarGrid
+			if ((!Robotaxi->Path || IsStackEmpty(Robotaxi->Path)) && 
+				RobotaxiFinishedFollowPath(Robotaxi->Position, LastPosition)) {
+				Robotaxi->Path = FindPath(
+									(point) {(int) (Robotaxi->Position.X / TILE_SIZE_PIXELS),(int) (Robotaxi->Position.Y / TILE_SIZE_PIXELS)}, 
+									FindParkingSpot(Robotaxi->Order.Destination, AStarGrid), AStarGrid
 								);		
-				if (Taxibot->Path != NULL) {
-					Taxibot->Status = TAXIBOT_TO_DEST;
-					Taxibot->Order.Status = IN_TRANSIT;
+				if (Robotaxi->Path != NULL) {
+					Robotaxi->Status = ROBOTAXI_TO_DEST;
+					Robotaxi->Order.Status = IN_TRANSIT;
 				} else {
-					Taxibot->Status = TAXIBOT_AVAILABLE;
+					Robotaxi->Status = ROBOTAXI_AVAILABLE;
 				}
 			}
 		} break;
 
-		case TAXIBOT_TO_DEST:
+		case ROBOTAXI_TO_DEST:
 		{
-			point LastPosition = FindParkingSpot(Taxibot->Order.Destination, AStarGrid);
-			TaxibotFollowPath(Taxibot, Taxibot->Path, LastPosition);
+			point LastPosition = FindParkingSpot(Robotaxi->Order.Destination, AStarGrid);
+			RobotaxiFollowPath(Robotaxi, Robotaxi->Path, LastPosition);
 
-			if ((!Taxibot->Path || IsStackEmpty(Taxibot->Path)) &&
-				TaxibotFinishedFollowPath(Taxibot->Position, LastPosition)) {
-				Taxibot->Status = TAXIBOT_AVAILABLE;
-				Taxibot->Order.Status = ARRIVED;
+			if ((!Robotaxi->Path || IsStackEmpty(Robotaxi->Path)) && RobotaxiFinishedFollowPath(Robotaxi->Position, LastPosition)) {
+				Robotaxi->Status = ROBOTAXI_AVAILABLE;
+				Robotaxi->Order.Status = ARRIVED;
 			}
 		} break;	
+
+		case ROBOTAXI_END_SHIFT:
+		{	
+			v2 ClosestDepot = FindClosestDepot(Robotaxi->Position, Depots, DepotsLength);
+			if ((!Robotaxi->Path || IsStackEmpty(Robotaxi->Path))) {
+				Robotaxi->Path = FindPath(
+									(point) {(int) (Robotaxi->Position.X / TILE_SIZE_PIXELS),(int) (Robotaxi->Position.Y / TILE_SIZE_PIXELS)}, 
+									(point) {(int) (ClosestDepot.X / TILE_SIZE_PIXELS), (int) (ClosestDepot.Y / TILE_SIZE_PIXELS)},
+									 AStarGrid
+								);	
+				Robotaxi->Status = ROBOTAXI_TO_DEPOT;
+			}
+
+		} break;
+
+		case ROBOTAXI_TO_DEPOT:
+		{
+			v2 ClosestDepot = FindClosestDepot(Robotaxi->Position, Depots, DepotsLength);
+			if (RobotaxiFinishedFollowPath(Robotaxi->Position, (point) {(int) (ClosestDepot.X / TILE_SIZE_PIXELS), (int) (ClosestDepot.Y / TILE_SIZE_PIXELS)}) == 0) {
+				RobotaxiFollowPath(Robotaxi, Robotaxi->Path, (point) {(int) (ClosestDepot.X / TILE_SIZE_PIXELS), (int) (ClosestDepot.Y / TILE_SIZE_PIXELS)});
+			} else {
+				Robotaxi->Status = ROBOTAXI_AVAILABLE;
+			}
+		} break;
 	}
 }
 
-void TaxibotFollowPath(taxibot *Taxibot, Tstack *Path, point LastPosition)
+void RobotaxiFollowPath(Robotaxi *Robotaxi, Tstack *Path, point LastPosition)
 {
-	if ((!Path || IsStackEmpty(Taxibot->Path)) && TaxibotFinishedFollowPath(Taxibot->Position, LastPosition))
+	if ((!Path || IsStackEmpty(Robotaxi->Path)) && RobotaxiFinishedFollowPath(Robotaxi->Position, LastPosition))
 		return;
 
-	v2 Distance = TaxibotMoveTowardsPoint(Taxibot, (point) {(int) (Taxibot->NextPosition.X), (int) (Taxibot->NextPosition.Y)});
-	if (Distance.X < TAXIBOT_SPEED && Distance.Y < TAXIBOT_SPEED) {
-		Tstack *stack = PopStack(&Taxibot->Path);
-		Taxibot->NextPosition = (v2) {stack->Data.Location.Row * TILE_SIZE_PIXELS + TILE_SIZE_PIXELS/2, stack->Data.Location.Col * TILE_SIZE_PIXELS + TILE_SIZE_PIXELS/2};
+	v2 Distance = RobotaxiMoveTowardsPoint(Robotaxi, (point) {(int) (Robotaxi->NextPosition.X), (int) (Robotaxi->NextPosition.Y)});
+	if (Distance.X < Robotaxi_SPEED && Distance.Y < Robotaxi_SPEED) {
+		Tstack *stack = PopStack(&Robotaxi->Path);
+		Robotaxi->NextPosition = (v2) {stack->Data.Location.Row * TILE_SIZE_PIXELS + TILE_SIZE_PIXELS/2, stack->Data.Location.Col * TILE_SIZE_PIXELS + TILE_SIZE_PIXELS/2};
 		free(stack); 
 	}
 }
 
-bool TaxibotFinishedFollowPath(v2 TaxibotPosition, point LastPosition)
+bool RobotaxiFinishedFollowPath(v2 RobotaxiPosition, point LastPosition)
 {
-	if (((TaxibotPosition.X - TILE_SIZE_PIXELS / 2) / TILE_SIZE_PIXELS) == (double)LastPosition.Row && 
-		((TaxibotPosition.Y - TILE_SIZE_PIXELS / 2) / TILE_SIZE_PIXELS) == (double)LastPosition.Col)
+	if (((RobotaxiPosition.X - TILE_SIZE_PIXELS / 2) / TILE_SIZE_PIXELS) == (double)LastPosition.Row && 
+		((RobotaxiPosition.Y - TILE_SIZE_PIXELS / 2) / TILE_SIZE_PIXELS) == (double)LastPosition.Col)
 		return true;
 	return false;
 }
@@ -534,71 +568,71 @@ point FindParkingSpot(v2 Location, astar_grid *AStarGrid) {
     }
 }
 
-v2 GetTaxiBotDirection(taxibot *Taxibot, point Point) 
+v2 GetRobotaxiDirection(Robotaxi *Robotaxi, point Point) 
 {
 	int DirectionX = 0;
 	int DirectionY = 0;
 
-	if ((int) (Taxibot->Position.X - Point.Row) < 0)
+	if ((int) (Robotaxi->Position.X - Point.Row) < 0)
 		DirectionX = 1;
-	else if ((int) (Taxibot->Position.X - Point.Row) > 0)
+	else if ((int) (Robotaxi->Position.X - Point.Row) > 0)
 		DirectionX = -1;
 
-	if ((int) (Taxibot->Position.Y - Point.Col) < 0)
+	if ((int) (Robotaxi->Position.Y - Point.Col) < 0)
 		DirectionY = 1;
-	else if ((int) (Taxibot->Position.Y - Point.Col) > 0)
+	else if ((int) (Robotaxi->Position.Y - Point.Col) > 0)
 		DirectionY = -1;
 
 	return (v2) {DirectionX, DirectionY};
 }
 
-v2 TaxibotMoveTowardsPoint(taxibot *Taxibot, point Point) 
+v2 RobotaxiMoveTowardsPoint(Robotaxi *Robotaxi, point Point) 
 {
-	v2 Distance = (v2) { abs(Taxibot->Position.X - Point.Row), 
-		                 abs(Taxibot->Position.Y - Point.Col)};
+	v2 Distance = (v2) { abs(Robotaxi->Position.X - Point.Row), 
+		                 abs(Robotaxi->Position.Y - Point.Col)};
 
-	if (Distance.X < TAXIBOT_SPEED && Distance.Y < TAXIBOT_SPEED) {
+	if (Distance.X < Robotaxi_SPEED && Distance.Y < Robotaxi_SPEED) {
 		return Distance;
 	}
 
-	Taxibot->Direction = GetTaxiBotDirection(Taxibot, Point);
+	Robotaxi->Direction = GetRobotaxiDirection(Robotaxi, Point);
 	
-	if (Distance.X < TAXIBOT_SPEED)
-		Taxibot->Position.X = Point.Row;
+	if (Distance.X < Robotaxi_SPEED)
+		Robotaxi->Position.X = Point.Row;
 	else
-		Taxibot->Position.X += Taxibot->Direction.X * Taxibot->Speed;
+		Robotaxi->Position.X += Robotaxi->Direction.X * Robotaxi->Speed;
 
-	if (Distance.Y < TAXIBOT_SPEED)
-		Taxibot->Position.Y = Point.Col;
+	if (Distance.Y < Robotaxi_SPEED)
+		Robotaxi->Position.Y = Point.Col;
 	else
-		Taxibot->Position.Y += Taxibot->Direction.Y * Taxibot->Speed;
+		Robotaxi->Position.Y += Robotaxi->Direction.Y * Robotaxi->Speed;
 
 	return Distance;
 }
 
-void AddTaxibot(taxibot *Taxibot, int *TaxibotsLength, depot *Depots, int DepotsLength)
+void AddRobotaxi(Robotaxi *Robotaxi, int *RobotaxisLength, depot *Depots, int DepotsLength)
 {	
-	if ((*TaxibotsLength) >= MAX_NUMBER_OF_TAXIBOTS)
+	if ((*RobotaxisLength) >= MAX_NUMBER_OF_RobotaxiS)
 		return;
 
 	int i = rand() % DepotsLength;
-	Taxibot->Position.X = Depots[i].Position.X + TILE_SIZE_PIXELS/2;
-	Taxibot->Position.Y = Depots[i].Position.Y + TILE_SIZE_PIXELS/2;
-	Taxibot->NextPosition = Taxibot->Position;
-	Taxibot->Status = TAXIBOT_AVAILABLE;
-	Taxibot->Path = NULL;
-	(*TaxibotsLength)++;
+	Robotaxi->Position.X = Depots[i].Position.X + TILE_SIZE_PIXELS/2;
+	Robotaxi->Position.Y = Depots[i].Position.Y + TILE_SIZE_PIXELS/2;
+	Robotaxi->NextPosition = Robotaxi->Position;
+	Robotaxi->Status = ROBOTAXI_AVAILABLE;
+	Robotaxi->Path = NULL;
+	(*RobotaxisLength)++;
 }
 
 void ShowOrdersQueue(Tqueue *Queue)
 {
 	node *Temp = Queue->head;
     while (Temp != NULL) {
-        printf("(O:%.0f %.0f)->", ((order*)((Temp)->Data))->Position.X, ((order*)((Temp)->Data))->Position.Y);
+        DEBUG_PRINT("(O:%.0f %.0f)->", ((order*)((Temp)->Data))->Position.X, ((order*)((Temp)->Data))->Position.Y);
         Temp = Temp->next;
     }
 
-    printf("\n");
+    DEBUG_PRINT("\n");
 }
 
 void CreateOrder(Tqueue *Orders, int *OrdersLength, astar_grid *AStarGrid) 
@@ -625,11 +659,36 @@ void CreateOrder(Tqueue *Orders, int *OrdersLength, astar_grid *AStarGrid)
 
 		if (AStarGrid->Map[(int)(Order.Position.X)][(int)(Order.Position.Y)].MovementCost == 0 &&
 			AStarGrid->Map[(int)(Order.Destination.X)][(int)(Order.Destination.Y)].MovementCost == 0) { 
-			printf("---Order: (%.0f %.0f) (%.0f %.0f)\n", Order.Position.X, Order.Position.Y, Order.Destination.X, Order.Destination.Y);
+			DEBUG_PRINTL("->Order: (%.0f %.0f) (%.0f %.0f)\n", Order.Position.X, Order.Position.Y, Order.Destination.X, Order.Destination.Y);
 			PushQueue(Orders, &Order);
 			(*OrdersLength)++;
 		} else {
-			printf("Invalid order\n");
+			DEBUG_PRINTL("Invalid order\n");
+		}
+	}
+}
+
+v2 FindClosestDepot(v2 RobotaxiPosition, depot *Depots, int DepotsLength)
+{	
+	v2 ClosestDepot = {0};
+	double Distance = INT_MAX;
+	for (int i = 0; i < DepotsLength; i++) {
+		double NewDistance = abs(RobotaxiPosition.X - Depots[i].Position.X) + abs(RobotaxiPosition.Y - Depots[i].Position.Y);
+		if (NewDistance < Distance) {
+			Distance = NewDistance;
+			ClosestDepot.X = Depots[i].Position.X;
+			ClosestDepot.Y = Depots[i].Position.Y;
+		}
+	}
+
+	return ClosestDepot;
+}
+
+void RobotaxisReturnToDepots(Robotaxi *Robotaxis, int RobotaxisLength)
+{
+	for (int i = 0; i < RobotaxisLength; i++) {
+		if (Robotaxis[i].Status == ROBOTAXI_AVAILABLE) {
+			Robotaxis[i].Status = ROBOTAXI_END_SHIFT;
 		}
 	}
 }
@@ -648,23 +707,23 @@ int my_random_function()
     return (rand() % 2);
 }
 
-void DrawTaxibots(taxibot *Taxibots, int TaxibotsLength) 
+void DrawRobotaxis(Robotaxi *Robotaxis, int RobotaxisLength) 
 {
-	for (int i = 0; i < TaxibotsLength; i++) {
-		DrawTaxibot(&Taxibots[i]);
+	for (int i = 0; i < RobotaxisLength; i++) {
+		DrawRobotaxi(&Robotaxis[i]);
 	}
 }
 
-void DrawTaxibot(taxibot *Taxibot) 
+void DrawRobotaxi(Robotaxi *Robotaxi) 
 {	
-	SDL_FRect r = {.x = Taxibot->Position.Y - TILE_SIZE_PIXELS/2, 
-				   .y = Taxibot->Position.X - TILE_SIZE_PIXELS/2, 
+	SDL_FRect r = {.x = Robotaxi->Position.Y - TILE_SIZE_PIXELS/2, 
+				   .y = Robotaxi->Position.X - TILE_SIZE_PIXELS/2, 
 				   .w = TILE_SIZE_PIXELS, .h = TILE_SIZE_PIXELS};
 
 	DrawRectangle(r, 248, 215, 99);
 
-	if (Taxibot->Status == TAXIBOT_TO_ORDER || Taxibot->Status == TAXIBOT_TO_DEST)
-		DrawOrder(&Taxibot->Order);
+	if (Robotaxi->Status == ROBOTAXI_TO_ORDER || Robotaxi->Status == ROBOTAXI_TO_DEST)
+		DrawOrder(&Robotaxi->Order);
 
 }
 
@@ -770,11 +829,12 @@ void DrawTilemap(tilemap *Tilemap)
 	}
 }
 
-void DestroyDispatcher(taxibot_dispatcher *Dispatcher)
+void DestroyDispatcher(Robotaxi_dispatcher *Dispatcher)
 {
-	free(Dispatcher->Taxibots);
+	free(Dispatcher->Robotaxis);
 	free(Dispatcher->Depots);
 	DestroyQueue(&Dispatcher->Orders);
+	free(Dispatcher);
 }
 
 void DestroyAStarGrid(astar_grid * AStarGrid) 
@@ -784,6 +844,7 @@ void DestroyAStarGrid(astar_grid * AStarGrid)
 	}
 
 	free(AStarGrid->Map);
+	free(AStarGrid);
 }
 
 void DestroyGameState(game_state *GameState)

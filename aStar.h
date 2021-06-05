@@ -1,3 +1,10 @@
+#ifdef DEBUG_MODE 
+    #define DEBUG_PRINT(msg, ...) logDebugInfo(__LINE__, ' ', msg, ##__VA_ARGS__)
+    #define DEBUG_PRINTL(msg, ...) logDebugInfo(__LINE__, '\n', msg, ##__VA_ARGS__)
+#else
+    #define DEBUG_PRINT(msg, ...) (void)0
+    #define DEBUG_PRINTL(msg, ...) (void)0
+#endif
 
 typedef struct point {
 	int Row;
