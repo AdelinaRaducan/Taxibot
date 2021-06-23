@@ -109,7 +109,6 @@ typedef struct order {
 typedef struct Robotaxi_dispatcher;
 
 typedef struct Robotaxi {
-	int ID;
 	v2 Position;
 	v2 Direction;
 	double Speed;
@@ -140,7 +139,6 @@ typedef struct game_state {
 	Tqueue Commands;
 	Uint8 *PreviousKeyboardState;
 } game_state;
-
 
 void CreateWindow(int Width, int Height);
 game_state * CreateGameState();
@@ -184,7 +182,6 @@ void DestroyDispatcher(Robotaxi_dispatcher *Dispatcher);
 void DestroyAStarGrid(astar_grid * AStarGrid);
 void DestroyGameState(game_state *GameState);
 void DestroyWindow();
-
 
 int main( int argc, char* args[] ) 
 {
@@ -264,7 +261,7 @@ astar_grid * CreateAStarGrid()
 	int k = 0;
 	for (int i = 0; i < AStarGrid->NumberRows; i++) {
 		for (int j = 0; j < AStarGrid->NumberCols; j++) {
-			if (i % 10 == 2 || j % 10 == 3) {
+			if (i % 10 == 2 || j % 10 == 2) {
 				AStarGrid->Map[i][j].MovementCost = my_random_function();
 			} else {
 				AStarGrid->Map[i][j].MovementCost = 1;
@@ -287,13 +284,11 @@ Robotaxi_dispatcher * CreateDispatcher()
 	Dispatcher->Robotaxis = (Robotaxi *) malloc (MAX_NUMBER_OF_RobotaxiS * sizeof(Robotaxi));
 	for (int i = 0; i < MAX_NUMBER_OF_RobotaxiS; ++i) {
 		Dispatcher->Robotaxis[i].Speed = Robotaxi_SPEED;
-		Dispatcher->Robotaxis[i].ID = i;
 	}
 
 	Dispatcher->RobotaxisLength = 0;
 	Dispatcher->Depots = (depot *) malloc(MAX_NUMBER_OF_DEPOTS * sizeof(depot));
 	Dispatcher->DepotsLength = 0;
-
 
 	// init orders
 	InitQueue(&Dispatcher->Orders, sizeof(order), NULL);

@@ -10,7 +10,7 @@ CC = gcc
 COMPILER_FLAGS = -w -Wall -I [licenta]
 
 #LINKER_FLAGS specifies the libraries we're linking against
-CFLAGS = libSDL2.a libSDL2main.a -lSDL2_ttf -lSDL2_image -lSDL2_gfx -lm -lpthread -Wl,--no-as-needed -ldl 
+LINKER_FLAGS = libSDL2.a libSDL2main.a -lSDL2_ttf -lSDL2_image -lSDL2_gfx -lm -lpthread -Wl,--no-as-needed -ldl 
 
 #OBJ_NAME specifies the name of our exectuable
 EXEC = main
@@ -19,13 +19,13 @@ run: build
 	./$(EXEC)
 
 build: 
-	$(CC) $(OBJS) $(COMPILER_FLAGS) $(CFLAGS) -o $(EXEC)
+	$(CC) $(OBJS) $(COMPILER_FLAGS) $(LINKER_FLAGS) -o $(EXEC)
 
 build_gdb:
-	$(CC) -g $(OBJS) $(COMPILER_FLAGS) $(CFLAGS) -o $(EXEC)
+	$(CC) -g $(OBJS) $(COMPILER_FLAGS) $(LINKER_FLAGS) -o $(EXEC)
 
 build_valgrind:
-	$(CC) -ggdb3 $(OBJS) $(COMPILER_FLAGS) $(CFLAGS) -o $(EXEC)
+	$(CC) -ggdb3 $(OBJS) $(COMPILER_FLAGS) $(LINKER_FLAGS) -o $(EXEC)
 
 clean:
 	rm -f $(EXEC)

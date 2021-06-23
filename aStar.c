@@ -343,6 +343,6 @@ Tstack * FindPath(point Start, point End, astar_grid *Grid) {
         }
     }
 
-    DEBUG_PRINTL("Failed to find the Destination Cell\n");
+    DEBUG_PRINT("Failed to find the Destination Cell\n");
     return NULL;
 }
