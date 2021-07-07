@@ -1,6 +1,7 @@
 #include "aStar.h"
 
-cell * GetCell(int X, int Y, astar_grid *Grid) {
+cell * GetCell(int X, int Y, astar_grid *Grid) 
+{
     if ((X >= 0) && (X < Grid->NumberRows)
          && (Y >= 0) && (Y < Grid->NumberCols)) {
         DEBUG_PRINTL("astar grid value: [%d][%d] = %d ", X, Y, Grid->Map[X][Y]);
@@ -10,13 +11,15 @@ cell * GetCell(int X, int Y, astar_grid *Grid) {
     return NULL;
 } 
 
-bool EqualPoints(point PointA, point PointB) {
+bool EqualPoints(point PointA, point PointB) 
+{
     if (PointA.Row == PointB.Row && PointA.Col == PointB.Col) 
         return 1;
     return 0;
 }
 
-bool IsNeighbour(point Location, point Neighbour, astar_grid *Grid) {
+bool IsNeighbour(point Location, point Neighbour, astar_grid *Grid) 
+{
     if (Neighbour.Row < 0 || Neighbour.Row >= Grid->NumberRows || Neighbour.Col < 0 || Neighbour.Col >= Grid->NumberCols) {
         return false;
     }
@@ -29,13 +32,15 @@ bool IsNeighbour(point Location, point Neighbour, astar_grid *Grid) {
     return false;
 }
 
-double CalculateHeuristic(point Source, point Dest, cell Node) {
+double CalculateHeuristic(point Source, point Dest, cell Node) 
+{
     double hNew = (abs(Source.Row - Dest.Row) + abs(Source.Col - Dest.Col));
     double gNew = Node.g + 1.0;
     return (gNew + hNew);
 }
 
-void CloneQueue(Tqueue *Queue, Tqueue *Clone) {
+void CloneQueue(Tqueue *Queue, Tqueue *Clone) 
+{
     node *temp = Queue->head;
     while(temp != NULL) {
         PushQueue(Clone, temp->Data);
@@ -50,7 +55,8 @@ void InitQueue(Tqueue *Queue, size_t memSize, compare_function Function)
    Queue->head  = NULL;
 }
 
-void PrintQueue(Tqueue *Queue) {
+void PrintQueue(Tqueue *Queue) 
+{
     node *Temp = Queue->head;
     while (Temp != NULL) {
         DEBUG_PRINT("(%d %d %.0f)->", ((cell*)((Temp)->Data))->Location.Row, ((cell*)((Temp)->Data))->Location.Col, ((cell*)((Temp)->Data))->f);
@@ -58,13 +64,15 @@ void PrintQueue(Tqueue *Queue) {
     }
 }
 
-int ComparePriority(const void *x1, const void *x2) {
+int ComparePriority(const void *x1, const void *x2) 
+{
     if (((cell*)(((node*)(x1))->Data))->f > ((cell*)(x2))->f)
         return 1;
     return 0;
 }
 
-void PushQueue(Tqueue *Queue, void* data) {
+void PushQueue(Tqueue *Queue, void* data) 
+{
     node *newNode = (node*) malloc(sizeof(node));
     node *temp = Queue->head;
 
@@ -110,14 +118,16 @@ void PushQueue(Tqueue *Queue, void* data) {
     }
 }
 
-void PeekQueue(Tqueue *Queue, void *data) {
+void PeekQueue(Tqueue *Queue, void *data) 
+{
    if(!IsQueueEmpty(Queue)) {
        node *temp = Queue->head;
        memcpy(data, temp->Data, Queue->memSize);
     }
 }
 
-void PopQueue(Tqueue *Queue) { 
+void PopQueue(Tqueue *Queue) 
+{ 
     if(!IsQueueEmpty(Queue)) {
         node *temp = Queue->head;
         // memcpy(data, temp->data, Queue->memSize);
@@ -133,13 +143,15 @@ void PopQueue(Tqueue *Queue) {
     }
 }
 
-int IsQueueEmpty(Tqueue *Queue) {
+int IsQueueEmpty(Tqueue *Queue) 
+{
     if (Queue->head == NULL) 
         return 1;
     return 0;
 }
 
-void DestroyQueue(Tqueue *Queue) {
+void DestroyQueue(Tqueue *Queue) 
+{
     node *temp;
 
      while(!IsQueueEmpty(Queue)) {
@@ -152,7 +164,8 @@ void DestroyQueue(Tqueue *Queue) {
     Queue->head = NULL;
 }
 
-Tstack * NewStackNode(cell Node) {
+Tstack * NewStackNode(cell Node) 
+{
     Tstack *NewNode = malloc(sizeof(Tstack));
     NewNode->Data.f = Node.f;
     NewNode->Data.g = Node.g;
@@ -165,13 +178,15 @@ Tstack * NewStackNode(cell Node) {
 }
 
 
-int IsStackEmpty(Tstack *Stack) {
+int IsStackEmpty(Tstack *Stack) 
+{
     if (Stack == NULL) 
         return 1;
     return 0;
 }
 
-void PushStack(Tstack **Stack, cell Node) {
+void PushStack(Tstack **Stack, cell Node)
+{
     Tstack *NewNode = NewStackNode(Node);
 
     if (IsStackEmpty(*Stack)) {
@@ -182,18 +197,21 @@ void PushStack(Tstack **Stack, cell Node) {
     }
 }
 
-Tstack * PeekStack(Tstack **Stack) {
+Tstack * PeekStack(Tstack **Stack) 
+{
     return (*Stack);
 }
 
-Tstack * PopStack(Tstack **Stack) {
+Tstack * PopStack(Tstack **Stack) 
+{
     Tstack *Temp = (*Stack);
     (*Stack) = (*Stack)->next;
 
     return Temp;
 }
 
-void PrintStack(Tstack *Stack) {
+void PrintStack(Tstack *Stack) 
+{
     Tstack *Temp = Stack;
     while (Temp != NULL) {
         DEBUG_PRINT("-> (%d,%d)", Temp->Data.Location.Row, Temp->Data.Location.Col);
@@ -202,7 +220,8 @@ void PrintStack(Tstack *Stack) {
     DEBUG_PRINT("\n");
 }
 
-void DestroyStack(Tstack **Stack) {
+void DestroyStack(Tstack **Stack) 
+{
     Tstack *Temp = NULL;
     while((*Stack) != NULL) {
         Temp = *Stack;
@@ -213,7 +232,8 @@ void DestroyStack(Tstack **Stack) {
    *Stack = NULL;
 }
 
-Tstack * TracePath(point Dest, astar_grid *Grid) {
+Tstack * TracePath(point Dest, astar_grid *Grid) 
+{
     Tstack *stack = NULL;
  
     int r = Dest.Row;
@@ -235,7 +255,8 @@ Tstack * TracePath(point Dest, astar_grid *Grid) {
     return stack;
 }
 
-bool ElementIsInOpenList(Tqueue *Queue, cell Node) {
+bool ElementIsInOpenList(Tqueue *Queue, cell Node) 
+{
     node *Temp = Queue->head;
     while (Temp != NULL) {
         if (((cell*)((Temp)->Data))->f == Node.f 
@@ -250,7 +271,8 @@ bool ElementIsInOpenList(Tqueue *Queue, cell Node) {
     return false;
 }
 
-Tstack * FindPath(point Start, point End, astar_grid *Grid) {
+Tstack * FindPath(point Start, point End, astar_grid *Grid) 
+{
     if (Grid->IsOpenCellFunction(Start, Grid) == false || Grid->IsOpenCellFunction(End, Grid) == false) {
         DEBUG_PRINTL("Source or Destination is blocked\n");
         return NULL;
@@ -292,7 +314,7 @@ Tstack * FindPath(point Start, point End, astar_grid *Grid) {
         ClosedList[RefCoord.Row][RefCoord.Col] = true;
 
         /*
-                Generating all the 8 successor of this cell
+                Generating all the 4 successor of this cell
                          N 
                          | 
                          | 
@@ -301,11 +323,11 @@ Tstack * FindPath(point Start, point End, astar_grid *Grid) {
                          | 
                          S 
  
-                Cell-->Popped Cell (i, j)
-                N --> North     (i-1, j)
-                S --> South     (i+1, j)
-                E --> East      (i, j+1)
-                W --> West      (i, j-1)
+                Cell-->Popped Cell (x, y)
+                N --> North     (x-1, y)
+                S --> South     (x+1, y)
+                E --> East      (x, y+1)
+                W --> West      (x, y-1)
 
         */
 
